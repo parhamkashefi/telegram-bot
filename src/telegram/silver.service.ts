@@ -283,21 +283,89 @@ export class SilverService {
       const cleaned = priceText.replace(/[^0-9,]/g, '');
 
       if (!cleaned) {
-        return '🔘 noghresea.ir: ❌ قیمت یافت نشد';
+        return '⚪️ noghresea.ir: ❌ قیمت یافت نشد';
       }
 
       const numericPrice = cleaned.replace(/,/g, '');
 
       if (!numericPrice || isNaN(parseInt(numericPrice, 10))) {
-        return '🔘 noghresea.ir: ❌ قیمت نامعتبر';
+        return '⚪️ noghresea.ir: ❌ قیمت نامعتبر';
       }
 
-      return `🔘 noghresea.ir: ${cleaned} تومان`;
+      return `⚪️ noghresea.ir: ${cleaned} تومان`;
     } catch (err) {
       console.error('❌ Error fetching NoghreGea price:', err);
-      return '🔘 noghresea.ir: خطا در دریافت قیمت';
+      return '⚪️ noghresea.ir: خطا در دریافت قیمت';
     }
   }
+
+  // 🔸 Site 7 - tajnoghreh.com
+  async getSilverPriceFromTajNoghre(): Promise<string> {
+    try {
+      const browser = await puppeteer.launch({
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--no-first-run',
+          '--no-zygote',
+          '--single-process',
+          '--disable-gpu',
+        ],
+        timeout: 60000,
+      });
+
+      const page = await browser.newPage();
+
+      await page.setUserAgent(
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      );
+
+      await page.goto('https://tajnoghreh.com/silver-price/', {
+        waitUntil: 'networkidle2',
+        timeout: 30000,
+      });
+
+      // Give page time to fully render
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      // Extract price from the first text node of the element
+      const priceText = await page.evaluate(() => {
+        const el = document.querySelector(
+          'td.sheyda_hamarz_table_content-price',
+        );
+        if (!el) return '';
+        // First child text node contains the numeric price before "تومان"
+        return el.childNodes[0]?.textContent?.trim() || '';
+      });
+
+      await browser.close();
+
+      // Keep only numbers and commas
+      const cleaned = priceText.replace(/[^0-9,]/g, '');
+
+      if (!cleaned) {
+        return '⚪️ tajnoghreh.com: ❌ قیمت یافت نشد';
+      }
+
+      const numericPrice = cleaned.replace(/,/g, '');
+
+      if (!numericPrice || isNaN(parseInt(numericPrice, 10))) {
+        return '⚪️ tajnoghreh.com: ❌ قیمت نامعتبر';
+      }
+
+      return `⚪️ tajnoghreh.com: ${cleaned} تومان`;
+    } catch (err) {
+      console.error('❌ Error fetching TajNoghre price:', err);
+      return '⚪️ tajnoghreh.com: خطا در دریافت قیمت';
+    }
+  }
+  
+   // 🔸 Site 1 - tokeniko.com silver-bar
+
+    
 
   async getAllSilverPrices(): Promise<string> {
     const prices = await Promise.all([
@@ -307,6 +375,7 @@ export class SilverService {
       this.getPriceFromTokeniko(),
       this.getPriceFromSilverin(),
       this.getPriceFromNoghresea(),
+      this.getSilverPriceFromTajNoghre(),
       console.log(''),
       this.getIranTime(),
     ]);
