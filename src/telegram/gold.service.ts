@@ -140,11 +140,11 @@ export class GoldService {
 
       // Navigate to the website
       await page.goto('https://tabangohar.com/', {
-        waitUntil: 'networkidle2',
+        waitUntil: 'domcontentloaded',
       });
 
       // Wait for a generic element to ensure page load (e.g., body)
-      await page.waitForSelector('body', { timeout: 10000 });
+      await page.waitForSelector('body', { timeout: 60000 });
 
       // Extract the price using XPath with document.evaluate
       const price = await page.evaluate(() => {
@@ -212,6 +212,25 @@ export class GoldService {
     }
   }
 
+  // 🔸 Site 5 - kitco.com
+ async  getPriceFromKitco(): Promise<string> {
+  const browser = await puppeteer.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.goto('https://www.kitco.com/', { waitUntil: 'domcontentloaded' });
+
+    // gold element (first box on left side)
+    const selector = 'main div.flex > div:nth-child(1) div.text-right.font-medium';
+    await page.waitForSelector(selector);
+
+    const text = await page.$eval(selector, (el) => el.textContent?.trim() || '');
+    return `🟡 kitco.com : ${text}`;
+  } finally {
+    await browser.close();
+  }
+}
+
+
   // 🧠 Add sources like this
   async getAllGoldPrices(): Promise<string> {
     const prices = await Promise.all([
@@ -219,6 +238,8 @@ export class GoldService {
       this.getPriceFromTabloTala(),
       this.getPriceFromTabanGohar(),
       this.getPriceFromTalaIr(),
+      console.log(''),
+      this.getPriceFromKitco(),
       console.log(''),
       this.getIranTime(),
     ]);
