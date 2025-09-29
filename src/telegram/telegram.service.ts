@@ -18,7 +18,7 @@ export class TelegramService implements OnModuleInit {
   onModuleInit() {
     const token = this.configService.get<string>('BOT_TOKEN');
     this.bot = new TelegramBot(token, { polling: true });
-    this.groupChatId = this.configService.get<string>('GROUP_CHAT_ID')||"";
+    //this.groupChatId = this.configService.get<string>('GROUP_CHAT_ID')||"";
     this.initMenu();
     this.initAutoPriceSender();
   }
@@ -64,10 +64,10 @@ export class TelegramService implements OnModuleInit {
   }
 
   private initAutoPriceSender() {
-    if (!this.groupChatId) {
-      console.warn('❌ GROUP_CHAT_ID not set in .env');
-      return;
-    }
+    // if (!this.groupChatId) {
+    //   console.warn('❌ GROUP_CHAT_ID not set in .env');
+    //   return;
+    // }
 
     setInterval(async () => {
       try {
