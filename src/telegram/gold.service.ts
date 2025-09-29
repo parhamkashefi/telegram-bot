@@ -56,7 +56,7 @@ export class GoldService {
   // 🔸 Site 2 - tablotala.app
 
   async getPriceFromTabloTala(): Promise<string> {
-    let  browser = await puppeteer.launch({
+    let browser = await puppeteer.launch({
       headless: true,
       args: [
         '--no-sandbox',
@@ -66,7 +66,7 @@ export class GoldService {
         '--no-first-run',
         '--no-zygote',
         '--single-process',
-        '--disable-gpu'
+        '--disable-gpu',
       ],
       timeout: 60000, // Increase timeout to 60 seconds
     });
@@ -118,7 +118,7 @@ export class GoldService {
 
   // 🔸 Site 3 - tabangohar.com
   async getPriceFromTabanGohar(): Promise<string> {
-    let  browser = await puppeteer.launch({
+    let browser = await puppeteer.launch({
       headless: true,
       args: [
         '--no-sandbox',
@@ -128,7 +128,7 @@ export class GoldService {
         '--no-first-run',
         '--no-zygote',
         '--single-process',
-        '--disable-gpu'
+        '--disable-gpu',
       ],
       timeout: 60000, // Increase timeout to 60 seconds
     });
@@ -213,23 +213,28 @@ export class GoldService {
   }
 
   // 🔸 Site 5 - kitco.com
- async  getPriceFromKitco(): Promise<string> {
-  const browser = await puppeteer.launch({ headless: true });
-  try {
-    const page = await browser.newPage();
-    await page.goto('https://www.kitco.com/', { waitUntil: 'domcontentloaded' });
+  async getPriceFromKitco(): Promise<string> {
+    const browser = await puppeteer.launch({ headless: true });
+    try {
+      const page = await browser.newPage();
+      await page.goto('https://www.kitco.com/', {
+        waitUntil: 'domcontentloaded',
+      });
 
-    // gold element (first box on left side)
-    const selector = 'main div.flex > div:nth-child(1) div.text-right.font-medium';
-    await page.waitForSelector(selector);
+      // gold element (first box on left side)
+      const selector =
+        'main div.flex > div:nth-child(1) div.text-right.font-medium';
+      await page.waitForSelector(selector);
 
-    const text = await page.$eval(selector, (el) => el.textContent?.trim() || '');
-    return `🟡 kitco.com : ${text}`;
-  } finally {
-    await browser.close();
+      const text = await page.$eval(
+        selector,
+        (el) => el.textContent?.trim() || '',
+      );
+      return `🟡 kitco.com : ${text}`;
+    } finally {
+      await browser.close();
+    }
   }
-}
-
 
   // 🧠 Add sources like this
   async getAllGoldPrices(): Promise<string> {
