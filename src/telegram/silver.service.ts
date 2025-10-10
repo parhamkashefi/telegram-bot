@@ -10,7 +10,7 @@ import * as jalaali from 'jalaali-js';
 @Injectable()
 export class SilverService {
   private bot: TelegramBot;
-  constructor(private readonly configService: ConfigService) {}
+  constructor(private readonly configService: ConfigService) { }
 
   // persian to english (number)
   toEnglishDigits(str: string): string {
@@ -29,7 +29,7 @@ export class SilverService {
     const now = moment().tz('Asia/Tehran');
 
     const gYear = now.year();
-    const gMonth = now.month() + 1; // ماه در moment صفر-بیسه
+    const gMonth = now.month() + 1;
     const gDay = now.date();
 
     const jDate = jalaali.toJalaali(gYear, gMonth, gDay);
@@ -40,43 +40,88 @@ export class SilverService {
   }
 
   // 🔸 Site 1 - shirazsilver.com
-  async getPriceFromShirazSilver() {
-    let browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--single-process',
-        '--disable-gpu',
-      ],
-      timeout: 60000, // Increase timeout to 60 seconds
-    });
+// async getPriceFromShirazSilver() {
+//   let browser = await puppeteer.launch({
+//     headless: true,
+//     args: [
+//       '--no-sandbox',
+//       '--disable-setuid-sandbox',
+//       '--disable-dev-shm-usage',
+//       '--disable-accelerated-2d-canvas',
+//       '--no-first-run',
+//       '--no-zygote',
+//       '--single-process',
+//       '--disable-gpu',
+//       '--disable-features=VizDisplayCompositor',
+//       '--disable-software-rasterizer',
+//     ],
+//     timeout: 60000,
+//   });
 
-    const page = await browser.newPage();
+//   try {
+//     const page = await browser.newPage();
+//     await page.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+    
+//     await page.goto('https://shirazsilver.com/', { 
+//       waitUntil: 'networkidle2',
+//       timeout: 30000 
+//     });
 
-    await page.goto('https://shirazsilver.com/', { waitUntil: 'networkidle2' });
+//     // Try multiple selectors
+//     const selectors = [
+//       'span.text-\\[20px\\]', // The class from your HTML
+//       'p span', // Any span inside paragraph
+//       '[class*="text-"] span', // Any span with text classes
+//       'main span' // Any span in main
+//     ];
 
-    // Wait for the price element to appear
-    await page.waitForSelector('ul > li p.text-sm.font-bold.text-left.w-full');
+//     let priceText = '';
+//     for (const selector of selectors) {
+//       try {
+//         await page.waitForSelector(selector, { timeout: 5000 });
+//         priceText = await page.$eval(selector, el => el.textContent?.trim() || '');
+//         if (priceText && priceText.match(/[\d٬]/)) { // Check if it contains numbers/commas
+//           break;
+//         }
+//       } catch (e) {
+//         continue;
+//       }
+//     }
 
-    const priceText = await page.$eval(
-      'ul > li p.text-sm.font-bold.text-left.w-full',
-      (el) => (el.textContent || '').trim(),
-    );
+//     if (!priceText) {
+//       return '⚪️ shirazsilver.com: ❌ قیمت یافت نشد';
+//     }
 
-    await browser.close();
+//     // Convert Persian digits to English and clean
+//     const persianToEnglish = (str: string) => 
+//       str.replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
+//          .replace(/٬/g, ''); // Remove Arabic thousands separator
 
-    // Convert to English digits and clean
-    const cleanedPrice = priceText.replace(/[^\d]/g, '');
-    const price = parseInt(cleanedPrice, 10);
-    const dividedPrice = Math.floor(price / 10).toLocaleString();
+//     const cleanedPrice = persianToEnglish(priceText).replace(/[^\d]/g, '');
+    
+//     if (!cleanedPrice) {
+//       return '⚪️ shirazsilver.com: ❌ قیمت نامعتبر';
+//     }
 
-    return `⚪️ shirazsilver.com: ${dividedPrice} تومان`;
-  }
+//     const price = parseInt(cleanedPrice, 10);
+    
+//     if (isNaN(price)) {
+//       return '⚪️ shirazsilver.com: ❌ قیمت نامعتبر';
+//     }
+
+//     const dividedPrice = Math.floor(price / 10).toLocaleString('en-US');
+
+//     return `⚪️ shirazsilver.com: ${dividedPrice} تومان`;
+
+//   } catch (error) {
+//     console.error('❌ Error fetching ShirazSilver price:', error);
+//     return '⚪️ shirazsilver.com: خطا در دریافت قیمت';
+//   } finally {
+//     if (browser) {
+//       await browser.close();
+//     }
+//   }
+// }
 
   // 🔸 Site 2 - sarzamineshemsh.ir
   async getPriceFromSarzaminShems(): Promise<string> {
@@ -92,6 +137,8 @@ export class SilverService {
           '--no-zygote',
           '--single-process',
           '--disable-gpu',
+          '--disable-features=VizDisplayCompositor',
+          '--disable-software-rasterizer',
         ],
         timeout: 60000, // Increase timeout to 60 seconds
       });
@@ -185,50 +232,112 @@ export class SilverService {
   }
 
   // 🔸 Site 5 - silverin.ir
-  async getPriceFromSilverin() {
-    let browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--single-process',
-        '--disable-gpu',
-      ],
-      timeout: 60000, // Increase timeout to 60 seconds
-    });
+  async getPriceFromSilverin(): Promise<string> {
+    let browser;
+    try {
+      browser = await puppeteer.launch({
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--no-first-run',
+          '--no-zygote',
+          '--single-process',
+          '--disable-gpu',
+          '--disable-features=VizDisplayCompositor',
+          '--disable-software-rasterizer',
+        ],
+        timeout: 60000,
+      });
 
-    const page = await browser.newPage();
+      const page = await browser.newPage();
+      await page.setUserAgent(
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      );
 
-    await page.goto('https://silverin.ir/', { waitUntil: 'networkidle2' });
+      await page.goto('https://silverin.ir/', {
+        waitUntil: 'domcontentloaded',
+        timeout: 30000
+      });
 
-    // Use equivalent CSS selector instead of XPath
-    const selector =
-      'section:nth-of-type(7) div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > div > div:nth-of-type(6) bdi';
+      // Try multiple possible selectors
+      const selectors = [
+        'section:nth-of-type(7) div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > div > div:nth-of-type(6) bdi',
+        '.price',
+        '[class*="price"]',
+        'bdi',
+        'span[class*="price"]',
+        'div[class*="price"]'
+      ];
 
-    await page.waitForSelector(selector);
+      let priceText = '';
+      let foundSelector = '';
 
-    const priceText = await page.$eval(selector, (el) =>
-      (el.textContent || '').trim(),
-    );
+      for (const selector of selectors) {
+        try {
+          await page.waitForSelector(selector, { timeout: 5000 });
+          priceText = await page.$eval(selector, (el) => (el.textContent || '').trim());
+          if (priceText && priceText.length > 0) {
+            foundSelector = selector;
+            break;
+          }
+        } catch (e) {
+          // Continue to next selector
+          continue;
+        }
+      }
 
-    await browser.close();
+      if (!priceText) {
+        // Fallback: Try to find any numeric content on the page
+        const pageContent = await page.content();
+        const $ = cheerio.load(pageContent);
 
-    // Remove non-digits and convert Persian digits to English digits
-    const persianToEnglishDigits = (str: string) =>
-      str.replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)));
+        // Look for common price patterns
+        const priceElements = $('body').find('*:contains("تومان")');
+        for (let i = 0; i < priceElements.length; i++) {
+          const text = $(priceElements[i]).text().trim();
+          if (text.match(/[\d,]+/)) {
+            priceText = text;
+            break;
+          }
+        }
+      }
 
-    const cleanedPrice = persianToEnglishDigits(priceText).replace(
-      /[^\d]/g,
-      '',
-    );
-    const price = parseInt(cleanedPrice, 10);
-    const dividedPrice = Math.floor(price / 50).toLocaleString();
+      if (!priceText) {
+        return '⚪️ silverin.ir: ❌ قیمت یافت نشد';
+      }
 
-    return `⚪️ silverin.ir: ${dividedPrice} تومان`;
+      // Remove non-digits and convert Persian digits to English digits
+      const persianToEnglishDigits = (str: string) =>
+        str.replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)));
+
+      const cleanedPrice = persianToEnglishDigits(priceText).replace(/[^\d]/g, '');
+
+      if (!cleanedPrice) {
+        return '⚪️ silverin.ir: ❌ قیمت نامعتبر';
+      }
+
+      const price = parseInt(cleanedPrice, 10);
+
+      if (isNaN(price)) {
+        return '⚪️ silverin.ir: ❌ قیمت نامعتبر';
+      }
+
+      // Adjust division factor based on typical silver prices
+      const dividedPrice = Math.floor(price / (price > 100000 ? 10 : 1)).toLocaleString();
+
+      return `⚪️ silverin.ir: ${dividedPrice} تومان`;
+
+    } catch (err) {
+      console.error('❌ Error fetching Silverin price:', err);
+      return '⚪️ silverin.ir: خطا در دریافت قیمت';
+    } finally {
+      if (browser) {
+        await browser.close();
+      }
+    }
   }
 
   // 🔸 Site 6 - noghresea.ir
@@ -245,6 +354,8 @@ export class SilverService {
           '--no-zygote',
           '--single-process',
           '--disable-gpu',
+          '--disable-features=VizDisplayCompositor',
+          '--disable-software-rasterizer',
         ],
         timeout: 60000,
       });
@@ -313,6 +424,8 @@ export class SilverService {
           '--no-zygote',
           '--single-process',
           '--disable-gpu',
+          '--disable-features=VizDisplayCompositor',
+          '--disable-software-rasterizer',
         ],
         timeout: 60000,
       });
@@ -365,25 +478,89 @@ export class SilverService {
 
   // 🔸 Site 8 - kitco.com
   async getPriceFromKitco(): Promise<string> {
-    const browser = await puppeteer.launch({ headless: true });
+    let browser;
     try {
-      const page = await browser.newPage();
-      await page.goto('https://www.kitco.com/', {
-        waitUntil: 'domcontentloaded',
+      browser = await puppeteer.launch({
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--no-first-run',
+          '--no-zygote',
+          '--single-process',
+          '--disable-gpu',
+          '--disable-features=VizDisplayCompositor',
+          '--disable-software-rasterizer',
+          '--memory-pressure-off',
+          '--max-old-space-size=512',
+        ],
+        timeout: 60000
       });
 
-      // silver element (second box on right side)
-      const selector =
-        'main div.flex > div:nth-child(2) div.text-right.font-medium';
-      await page.waitForSelector(selector);
+      const page = await browser.newPage();
 
-      const text = await page.$eval(
-        selector,
-        (el) => el.textContent?.trim() || '',
-      );
-      return `⚪️ kitco.com : ${text}`;
+      // Set timeouts
+      await page.setDefaultNavigationTimeout(30000);
+      await page.setDefaultTimeout(15000);
+
+      // Prevent page from closing unexpectedly
+      page.on('error', (err) => {
+        console.log('Page error:', err);
+      });
+
+      page.on('pageerror', (err) => {
+        console.log('Page error:', err);
+      });
+
+      await page.goto('https://www.kitco.com/', {
+        waitUntil: 'networkidle0',
+        timeout: 30000
+      });
+
+      // Try multiple selectors for Kitco silver price
+      const selectors = [
+        'main div.flex > div:nth-child(2) div.text-right.font-medium',
+        '.silver-price',
+        '[data-metal="silver"]',
+        '.chart-spot',
+        '.price-value',
+        '.spot-price'
+      ];
+
+      let text = '';
+      for (const selector of selectors) {
+        try {
+          await page.waitForSelector(selector, { timeout: 5000 });
+          text = await page.$eval(selector, (el) => el.textContent?.trim() || '');
+          if (text && text.length > 0) break;
+        } catch (e) {
+          // Continue to next selector
+          continue;
+        }
+      }
+
+      if (!text) {
+        // Fallback: try to find any silver-related text
+        const pageContent = await page.content();
+        if (pageContent.includes('silver') || pageContent.includes('Silver')) {
+          text = 'Price available (extraction failed)';
+        }
+      }
+
+      return `⚪️ kitco.com : ${text || 'N/A'}`;
+
+    } catch (error) {
+      console.error('❌ Error fetching Kitco silver price:', error);
+      return '⚪️ kitco.com : خطا در دریافت';
     } finally {
-      await browser.close();
+      if (browser) {
+        try {
+          await browser.close();
+        } catch (closeError) {
+        }
+      }
     }
   }
 
@@ -400,6 +577,8 @@ export class SilverService {
         '--no-zygote',
         '--single-process',
         '--disable-gpu',
+        '--disable-features=VizDisplayCompositor',
+        '--disable-software-rasterizer',
       ],
       timeout: 60000,
     });
@@ -485,6 +664,8 @@ export class SilverService {
         '--no-zygote',
         '--single-process',
         '--disable-gpu',
+        '--disable-features=VizDisplayCompositor',
+        '--disable-software-rasterizer',
       ],
       timeout: 60000,
     });
@@ -571,6 +752,8 @@ export class SilverService {
         '--no-zygote',
         '--single-process',
         '--disable-gpu',
+        '--disable-features=VizDisplayCompositor',
+        '--disable-software-rasterizer',
       ],
       timeout: 60000,
     });
@@ -653,25 +836,36 @@ export class SilverService {
     }
   }
 
+  // //output all prices
   async getAllSilverPrices(): Promise<string> {
-    const prices = await Promise.all([
-      this.getPriceFromShirazSilver(),
-      this.getPriceFromSarzaminShems(),
-      this.getPriceFromNoghra(),
-      this.getPriceFromTokeniko(),
-      this.getPriceFromSilverin(),
-      this.getPriceFromNoghresea(),
-      this.getSilverPriceFromTajNoghre(),
-      this.getSilverBarPriceFromTokeniko(),
-      this.getSilverBarPriceFromParsis(),
-      this.getZiotoSilverBars(),
-      console.log(''),
-      this.getPriceFromKitco(),
-      console.log(''),
-      this.getIranTime(),
-    ]);
+    const priceMethods = [
+      //() => this.getPriceFromShirazSilver(),
+      () => this.getPriceFromSarzaminShems(),
+      () => this.getPriceFromNoghra(),
+      () => this.getPriceFromTokeniko(),
+      () => this.getPriceFromSilverin(),
+      () => this.getPriceFromNoghresea(),
+      () => this.getSilverPriceFromTajNoghre(),
+      () => this.getSilverBarPriceFromTokeniko(),
+      () => this.getSilverBarPriceFromParsis(),
+      () => this.getZiotoSilverBars(),
+      () => this.getPriceFromKitco(),
+    ];
 
-    return `📊 قیمت لحظه‌ای نقره:\n\n${prices.join('\n')}`;
-    ``;
+    // Execute each method with individual error handling
+    const pricePromises = priceMethods.map(async (method) => {
+      try {
+        return await method();
+      } catch (error) {
+        console.error(`Error in price method:`, error.message);
+        return `❌ خطا در دریافت قیمت`;
+      }
+    });
+
+    const prices = await Promise.all(pricePromises);
+    prices.push(this.getIranTime());
+
+    // Add double newline between each item for spacing
+    return `📊 قیمت لحظه‌ای نقره:\n\n${prices.join('\n\n')}`;
   }
 }
