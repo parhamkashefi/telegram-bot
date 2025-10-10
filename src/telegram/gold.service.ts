@@ -9,8 +9,7 @@ import puppeteer from 'puppeteer';
 @Injectable()
 export class GoldService {
   private bot: TelegramBot;
-  constructor(private readonly configService: ConfigService) {}
-  private readonly adminChatId = 112720047;
+  constructor(private readonly configService: ConfigService) { }
 
   // persian to english (number)
   toEnglishDigits(str: string): string {
@@ -67,6 +66,8 @@ export class GoldService {
         '--no-zygote',
         '--single-process',
         '--disable-gpu',
+        '--disable-features=VizDisplayCompositor',
+        '--disable-software-rasterizer',
       ],
       timeout: 60000, // Increase timeout to 60 seconds
     });
@@ -129,6 +130,8 @@ export class GoldService {
         '--no-zygote',
         '--single-process',
         '--disable-gpu',
+        '--disable-features=VizDisplayCompositor',
+        '--disable-software-rasterizer',
       ],
       timeout: 60000, // Increase timeout to 60 seconds
     });
@@ -214,7 +217,21 @@ export class GoldService {
 
   // 🔸 Site 5 - kitco.com
   async getPriceFromKitco(): Promise<string> {
-    const browser = await puppeteer.launch({ headless: true });
+    const browser = await puppeteer.launch({
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-zygote',
+        '--single-process',
+        '--disable-gpu',
+        '--disable-features=VizDisplayCompositor',
+        '--disable-software-rasterizer',
+      ], timeout: 60000,
+    });
     try {
       const page = await browser.newPage();
       await page.goto('https://www.kitco.com/', {
@@ -236,7 +253,7 @@ export class GoldService {
     }
   }
 
-  // 🧠 Add sources like this
+  // output all prices
   async getAllGoldPrices(): Promise<string> {
     const prices = await Promise.all([
       this.getPriceFromEstjt(),
