@@ -7,19 +7,12 @@ services:
       dockerfile: Dockerfile
     container_name: nestjs_telegram_bot
     restart: unless-stopped
-    network_mode: bridge
     env_file:
       - .env
     ports:
       - "3000:3000"
-    healthcheck:
-      test: ["CMD", "node", "-e", "process.exit(0)"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-        reservations:
-          memory: 256M
+    shm_size: 1g
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
