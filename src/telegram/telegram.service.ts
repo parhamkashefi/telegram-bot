@@ -13,25 +13,26 @@ export class TelegramService implements OnModuleInit {
     private readonly configService: ConfigService,
     private readonly goldService: GoldService,
     private readonly silverService: SilverService,
-  ) {}
+  ) { }
 
   onModuleInit() {
     const token = this.configService.get<string>('BOT_TOKEN');
     this.bot = new TelegramBot(token, { polling: true });
-    //this.groupChatId = this.configService.get<string>('GROUP_CHAT_ID')||"";
+    this.groupChatId = this.configService.get<string>('GROUP_CHAT_ID') || "";
     this.initMenu();
     this.initAutoPriceSender();
   }
 
 
-
+  //
   private initMenu() {
     this.bot.onText(/\/start/, (msg) => {
       const chatId = msg.chat.id;
-      this.bot.sendMessage(chatId, 'سلام! به ربات سوپرانو خوش آمدید.:', {
+      this.bot.sendMessage(chatId, 'سلام! به ربات سوپرانو خوش آمدید. :', {
         reply_markup: {
           keyboard: [['💰 قیمت لحظه‌ای طلا', '⚪️ قیمت لحظه‌ای نقره']],
           resize_keyboard: true,
+
         },
       });
     });
@@ -50,35 +51,56 @@ export class TelegramService implements OnModuleInit {
     });
   }
 
+  // output all gold prices
   async sendGoldPrice(chatId: number | string) {
     await this.bot.sendMessage(chatId, '⏳ در حال دریافت قیمت طلا...');
+    console.log(chatId)
     const prices = await this.goldService.getAllGoldPrices();
     await this.bot.sendMessage(chatId, prices);
-
   }
-
+  // output all silver prices
   async sendSilverPrice(chatId: number | string) {
     await this.bot.sendMessage(chatId, '⏳ در حال دریافت قیمت نقره...');
     const prices = await this.silverService.getAllSilverPrices();
     await this.bot.sendMessage(chatId, prices);
   }
 
+  // Auto send prices to group every 2 minutes
   private initAutoPriceSender() {
-    // if (!this.groupChatId) {
-    //   console.warn('❌ GROUP_CHAT_ID not set in .env');
-    //   return;
-    // }
+  this.groupChatId = this.configService.get<string>('GROUP_CHAT_ID') || '';
 
-    setInterval(async () => {
-      try {
-        const goldPrices = await this.goldService.getAllGoldPrices();
-        const silverPrices = await this.silverService.getAllSilverPrices();
-        const combinedMessage = `${goldPrices}\n\n${silverPrices}`;
-
-        await this.bot.sendMessage(this.groupChatId, combinedMessage);
-      } catch (err) {
-        console.error('❌ Error sending scheduled message:', err.message);
-      }
-    }, 300_000); 
+  if (!this.groupChatId) {
+    console.warn('❌ GROUP_CHAT_ID not set in .env');
+    return;
   }
+
+  console.log('🚀 Auto price sender started. Will send every 2 minutes.');
+
+  // ✅ Send immediately when bot starts
+  this.sendCombinedPrices();
+
+  // ✅ Then send every 2 minutes (120,000 ms)
+  setInterval(() => this.sendCombinedPrices(), 120_000);
+}
+
+private async sendCombinedPrices() {
+  try {
+    const [goldPrices, silverPrices] = await Promise.all([
+      this.goldService.getAllGoldPrices(),
+      this.silverService.getAllSilverPrices(),
+    ]);
+
+    const combinedMessage = `💰 <b>قیمت‌ها:</b>\n\n${goldPrices}\n\n${silverPrices}`;
+
+    await this.bot.sendMessage(this.groupChatId, combinedMessage, {
+      parse_mode: 'HTML',
+    });
+
+    console.log('✅ Prices sent to Telegram group successfully!');
+  } catch (err) {
+    console.error('❌ Error sending scheduled message:', err.message);
+  }
+}
+
+
 }
