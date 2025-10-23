@@ -35,27 +35,49 @@ export class GoldService {
   }
 
   // 🔸 Site 1 - estjt.ir
-  async getPriceFromEstjt(): Promise<string> {
-    try {
-      const { data } = await axios.get('https://www.estjt.ir/price/');
-      const $ = cheerio.load(data);
-      let price = '❌ پیدا نشد';
-      $('tbody tr').each((_, tr) => {
-        const tds = $(tr).find('td');
-        if (tds.eq(0).text().includes('طلای ۱۸')) {
-          price = this.toEnglishDigits(tds.eq(1).text().trim());
-        }
-      });
-      return `🟡 estjt.ir: ${price} `;
-    } catch {
-      return '🟡 estjt.ir: خطا در دریافت';
+async getPriceFromEstjt(): Promise<string> {
+  try {
+    const { data } = await axios.get('https://www.estjt.ir/price/', {
+      timeout: 30000,
+    });
+
+    const $ = cheerio.load(data);
+    let price: string | null = null;
+
+    $('tbody tr').each((_, tr) => {
+      const tds = $(tr).find('td');
+      const title = tds.eq(0).text().trim();
+      const value = tds.eq(1).text().trim();
+
+      if (title.includes('طلای ۱۸')) {
+        // Remove non-digit characters and convert Persian digits if needed
+        const cleanValue = value.replace(/[^\d۰-۹]/g, '');
+        const englishValue = cleanValue.replace(/[۰-۹]/g, (d) =>
+          String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))
+        );
+        price = englishValue;
+      }
+    });
+
+    if (price) {
+      const formattedPrice = Number(price).toLocaleString('en-US');
+      return `🟡 estjt.ir: ${formattedPrice}`;
+    } else {
+      return '🟡 estjt.ir: ❌ پیدا نشد';
     }
+  } catch (error) {
+    console.error('Error fetching price from estjt.ir:', error);
+    return '🟡 estjt.ir: خطا در دریافت';
   }
+}
 
   // 🔸 Site 2 - tablotala.app
+ async getPriceFromTabloTala(): Promise<string> {
+  let browser;
+  let page;
 
-  async getPriceFromTabloTala(): Promise<string> {
-    let browser = await puppeteer.launch({
+  try {
+    browser = await puppeteer.launch({
       headless: true,
       args: [
         '--no-sandbox',
@@ -69,57 +91,69 @@ export class GoldService {
         '--disable-features=VizDisplayCompositor',
         '--disable-software-rasterizer',
       ],
-      timeout: 60000, // Increase timeout to 60 seconds
+      timeout: 60000,
     });
-    try {
-      // Launch a headless browser
 
-      const page = await browser.newPage();
+    page = await browser.newPage();
 
-      // Navigate to the website
-      await page.goto('https://tv.tablotala.app/#/home', {
-        waitUntil: 'networkidle0',
-      });
+    await page.goto('https://tv.tablotala.app/#/home', {
+      waitUntil: 'networkidle0',
+      timeout: 60000,
+    });
 
-      console.log('Page loaded, waiting for content...');
+    await page.waitForSelector('body', { timeout: 10000 });
 
-      // Wait for a generic element to ensure page load (e.g., body)
-      await page.waitForSelector('body', { timeout: 10000 });
+    const price = await page.evaluate(() => {
+      const xpath = '/html/body/div/div[2]/div[2]/div[5]/div/span';
+      const result = document.evaluate(
+        xpath,
+        document,
+        null,
+        XPathResult.FIRST_ORDERED_NODE_TYPE,
+        null
+      );
+      const element = result.singleNodeValue as HTMLElement | null;
+      if (!element) return null;
 
-      // Extract the price using XPath with document.evaluate
-      const price = await page.evaluate(() => {
-        const xpath = '/html/body/div/div[2]/div[2]/div[5]/div/span';
-        const result = document.evaluate(
-          xpath,
-          document,
-          null,
-          XPathResult.FIRST_ORDERED_NODE_TYPE,
-          null,
-        );
-        const element = result.singleNodeValue as HTMLElement;
-        return element
-          ? (element.textContent || '').trim().replace(/[^\d]/g, '')
-          : null;
-      });
+      const rawText = (element.textContent || '').trim();
+      const digits = rawText.replace(/[^\d]/g, ''); // keep only numbers
+      return digits || null;
+    });
 
-      // Close the browser
-      await browser.close();
-      // Return the formatted price or error message
-      if (price) {
-        return `🟡  tv.tablotala.app: ${price} `;
-      } else {
-        return '🟡 tv.tablotala.app: ❌ پیدا نشد';
+    if (price) {
+      const formattedPrice = Number(price).toLocaleString('en-US');
+      return `🟡 tv.tablotala.app: ${formattedPrice}`;
+    } else {
+      return '🟡 tv.tablotala.app: ❌ پیدا نشد';
+    }
+  } catch (error) {
+    console.error('Error fetching price from TabloTala:', error);
+    return '🟡 tv.tablotala.app: خطا در دریافت';
+  } finally {
+    if (page) {
+      try {
+        await page.close();
+      } catch (err) {
+        console.error('Error closing page:', err);
       }
-    } catch (error) {
-      console.error('Error fetching price from TabloTala:', error);
-      if (browser) await browser.close();
-      return '🟡 tv.tablotala.app: خطا در دریافت';
+    }
+    if (browser) {
+      try {
+        await browser.close();
+      } catch (err) {
+        console.error('Error closing browser:', err);
+      }
     }
   }
+}
 
   // 🔸 Site 3 - tabangohar.com
-  async getPriceFromTabanGohar(): Promise<string> {
-    let browser = await puppeteer.launch({
+async getPriceFromTabanGohar(): Promise<string> {
+  let browser;
+  let page;
+
+  try {
+    browser = await puppeteer.launch({
       headless: true,
       args: [
         '--no-sandbox',
@@ -133,67 +167,64 @@ export class GoldService {
         '--disable-features=VizDisplayCompositor',
         '--disable-software-rasterizer',
       ],
-      timeout: 60000, // Increase timeout to 60 seconds
+      timeout: 60000,
     });
-    let page;
-    try {
-      // Launch a headless browser
 
-      page = await browser.newPage();
+    page = await browser.newPage();
+    await page.goto('https://tabangohar.com/', {
+      waitUntil: 'domcontentloaded',
+    });
 
-      // Navigate to the website
-      await page.goto('https://tabangohar.com/', {
-        waitUntil: 'domcontentloaded',
-      });
+    await page.waitForSelector('body', { timeout: 60000 });
 
-      // Wait for a generic element to ensure page load (e.g., body)
-      await page.waitForSelector('body', { timeout: 60000 });
+    const price = await page.evaluate(() => {
+      const xpath =
+        '/html/body/main/div/div/section[4]/div[2]/div[1]/div/div[4]/div/div';
+      const result = document.evaluate(
+        xpath,
+        document,
+        null,
+        XPathResult.FIRST_ORDERED_NODE_TYPE,
+        null
+      );
+      const element = result.singleNodeValue as HTMLElement | null;
+      if (!element) return null;
 
-      // Extract the price using XPath with document.evaluate
-      const price = await page.evaluate(() => {
-        const xpath =
-          '/html/body/main/div/div/section[4]/div[2]/div[1]/div/div[4]/div/div';
-        const result = document.evaluate(
-          xpath,
-          document,
-          null,
-          XPathResult.FIRST_ORDERED_NODE_TYPE,
-          null,
-        );
-        const element = result.singleNodeValue as HTMLElement;
-        return element
-          ? (element.textContent || '').trim().replace(/[^\d]/g, '')
-          : null;
-      });
+      const rawText = (element.textContent || '').trim();
 
-      // Return the formatted price or error message
-      if (price) {
-        return `🟡 tabangohar.com : ${price}`;
-      } else {
-        return '🟡 tabangohar.com : ❌ پیدا نشد';
-      }
-    } catch (error) {
-      console.error('Error fetching price from tabangohar:', error);
-      return '🟡 tabangohar.com : خطا در دریافت';
-    } finally {
-      // Always close page and browser in finally block
+      // extract digits only (e.g. "۱۰۰۰۰۰" → "100000")
+      const digits = rawText.replace(/[^\d]/g, '');
+
+      return digits || null;
+    });
+
+    if (price) {
+      // ✅ Format with commas — e.g. "100000" → "100,000"
+      const formattedPrice = Number(price).toLocaleString('en-US');
+      return `🟡 tabangohar.com : ${formattedPrice}`;
+    } else {
+      return '🟡 tabangohar.com : ❌ پیدا نشد';
+    }
+  } catch (error) {
+    console.error('Error fetching price from tabangohar:', error);
+    return '🟡 tabangohar.com : خطا در دریافت';
+  } finally {
+    if (page) {
       try {
-        if (page) {
-          await page.close();
-        }
-      } catch (closeError) {
-        console.error('Error closing page:', closeError);
+        await page.close();
+      } catch (err) {
+        console.error('Error closing page:', err);
       }
-
+    }
+    if (browser) {
       try {
-        if (browser) {
-          await browser.close();
-        }
-      } catch (closeError) {
-        console.error('Error closing browser:', closeError);
+        await browser.close();
+      } catch (err) {
+        console.error('Error closing browser:', err);
       }
     }
   }
+}
 
   // 🔸 Site 4 - tala.ir
   async getPriceFromTalaIr(): Promise<string> {
@@ -247,7 +278,7 @@ export class GoldService {
         selector,
         (el) => el.textContent?.trim() || '',
       );
-      return `🟡 kitco.com : ${text}`;
+      return `🟡 kitco.com $ : ${text}`;
     } finally {
       await browser.close();
     }
