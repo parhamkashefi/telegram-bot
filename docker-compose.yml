@@ -1,11 +1,9 @@
-version: '3.8'
-
 services:
-  telegram-bot:
+  telegram-bot-dev:
     build:
       context: .
-      dockerfile: Dockerfile
-    container_name: nestjs_telegram_bot
+      dockerfile: Dockerfile.dev
+    container_name: nestjs_telegram_bot_dev
     restart: unless-stopped
     env_file:
       - .env
@@ -13,6 +11,9 @@ services:
       - "3000:3000"
     depends_on:
       - mongo
+    volumes:
+      - .:/usr/src/app 
+      - /usr/src/app/node_modules  
     shm_size: 1g
     ulimits:
       nofile:
@@ -20,7 +21,7 @@ services:
         hard: 65536
 
   mongo:
-    image: mongo:6
+    image: mongo:4.4
     container_name: mongo
     restart: always
     ports:
