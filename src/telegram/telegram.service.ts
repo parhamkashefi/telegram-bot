@@ -20,11 +20,9 @@ export class TelegramService implements OnModuleInit {
     this.bot = new TelegramBot(token, { polling: true });
     this.groupChatId = this.configService.get<string>('GROUP_CHAT_ID') || "";
     this.initMenu();
-    this.initAutoPriceSender();
+    // this.initAutoPriceSender();
   }
 
-
-  //
   private initMenu() {
     this.bot.onText(/\/start/, (msg) => {
       const chatId = msg.chat.id;
@@ -54,7 +52,6 @@ export class TelegramService implements OnModuleInit {
   // output all gold prices
   async sendGoldPrice(chatId: number | string) {
     await this.bot.sendMessage(chatId, '⏳ در حال دریافت قیمت طلا...');
-    console.log(chatId)
     const prices = await this.goldService.getAllGoldPrices();
     await this.bot.sendMessage(chatId, prices);
   }
@@ -66,7 +63,7 @@ export class TelegramService implements OnModuleInit {
   }
 
   // Auto send prices to group every 2 minutes
-  private initAutoPriceSender() {
+private initAutoPriceSender() {
   this.groupChatId = this.configService.get<string>('GROUP_CHAT_ID') || '';
 
   if (!this.groupChatId) {
@@ -74,33 +71,47 @@ export class TelegramService implements OnModuleInit {
     return;
   }
 
-  console.log('🚀 Auto price sender started. Will send every 2 minutes.');
+  console.log('🚀 Auto price sender started. Will send every 30 minutes.');
 
   // ✅ Send immediately when bot starts
   this.sendCombinedPrices();
 
-  // ✅ Then send every 2 minutes (120,000 ms)
-  setInterval(() => this.sendCombinedPrices(), 120_000);
+  // ✅ Then send every 30 minutes (30 * 60 * 1000 ms)
+  setInterval(() => this.sendCombinedPrices(), 30 * 60 * 1000);
 }
 
-private async sendCombinedPrices() {
-  try {
-    const [goldPrices, silverPrices] = await Promise.all([
-      this.goldService.getAllGoldPrices(),
-      this.silverService.getAllSilverPrices(),
-    ]);
 
-    const combinedMessage = `💰 <b>قیمت‌ها:</b>\n\n${goldPrices}\n\n${silverPrices}`;
+  private async sendCombinedPrices() {
+    try {
+      // 🕒 get current time once
+      const now = new Date();
+      const formattedDate = now.toLocaleString('fa-IR', {
+        dateStyle: 'short',
+        timeStyle: 'short',
+      });
 
-    await this.bot.sendMessage(this.groupChatId, combinedMessage, {
-      parse_mode: 'HTML',
-    });
+      // 🪙 get both prices
+      const [goldPrices, silverPrices] = await Promise.all([
+        this.goldService.getAllGoldPrices(),
+        this.silverService.getAllSilverPrices(),
+      ]);
 
-    console.log('✅ Prices sent to Telegram group successfully!');
-  } catch (err) {
-    console.error('❌ Error sending scheduled message:', err.message);
+      // 🧩 combine with a single timestamp
+      const combinedMessage = `
+💰 <b>قیمت‌ها (${formattedDate}):</b>
+
+${goldPrices}
+
+${silverPrices}
+`;
+
+      await this.bot.sendMessage(this.groupChatId, combinedMessage, {
+        parse_mode: 'HTML',
+      });
+
+      console.log('✅ Prices sent to Telegram group successfully!');
+    } catch (err) {
+      console.error('❌ Error sending scheduled message:', err.message);
+    }
   }
-}
-
-
 }
