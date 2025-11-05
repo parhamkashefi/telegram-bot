@@ -55,6 +55,7 @@ export class TelegramService implements OnModuleInit {
     const prices = await this.goldService.getAllGoldPrices();
     await this.bot.sendMessage(chatId, prices);
   }
+
   // output all silver prices
   async sendSilverPrice(chatId: number | string) {
     await this.bot.sendMessage(chatId, '⏳ در حال دریافت قیمت نقره...');
