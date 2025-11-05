@@ -2,7 +2,7 @@ services:
   telegram-bot-dev:
     build:
       context: .
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile
     container_name: nestjs_telegram_bot_dev
     restart: unless-stopped
     env_file:
