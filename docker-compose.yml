@@ -12,13 +12,22 @@ services:
     depends_on:
       - mongo
     volumes:
-      - .:/usr/src/app 
-      - /usr/src/app/node_modules  
+      - ./src:/usr/src/app/src
+      - ./package.json:/usr/src/app/package.json
+      - ./tsconfig.json:/usr/src/app/tsconfig.json
+      - ./nest-cli.json:/usr/src/app/nest-cli.json
+      - /usr/src/app/node_modules
+      # - /usr/src/app/dist
+    working_dir: /usr/src/app
     shm_size: 1g
     ulimits:
       nofile:
         soft: 65536
         hard: 65536
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
+    command: sh -c "npm run start:dev"
 
   mongo:
     image: mongo:4.4
