@@ -1,0 +1,77 @@
+# FROM node:20-alpine
+
+# # Install dependencies for Puppeteer
+# RUN apk add --no-cache \
+#     chromium \
+#     nss \
+#     freetype \
+#     harfbuzz \
+#     ca-certificates \
+#     ttf-freefont \
+#     curl \
+#     bash
+
+# # Set Puppeteer environment variables
+# ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser \
+#     PUPPETEER_SKIP_DOWNLOAD=true \
+#     CHOKIDAR_USEPOLLING=true
+
+# WORKDIR /usr/src/app
+
+# # Copy package files first for better caching
+# COPY package*.json ./
+# RUN npm install --legacy-peer-deps
+
+# # Copy source code
+# COPY . .
+
+# # Create user with proper permissions
+# RUN addgroup -g 1001 -S nodejs && \
+#     adduser -S nestjs -u 1001 && \
+#     chown -R nestjs:nodejs /usr/src/app
+
+# USER nestjs
+
+# EXPOSE 3000
+# CMD ["npm", "run", "start:dev"]
+
+
+
+FROM node:20-alpine
+
+# Install dependencies for Puppeteer
+RUN apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont \
+    curl \
+    bash
+
+# Set Puppeteer environment variables
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser \
+    PUPPETEER_SKIP_DOWNLOAD=true \
+    CHOKIDAR_USEPOLLING=true
+
+WORKDIR /usr/src/app
+
+# Copy package files first for better caching
+COPY package*.json ./
+RUN npm install --legacy-peer-deps
+
+# Copy source code
+COPY . .
+
+# Create user with proper permissions and ensure dist directory permissions
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nestjs -u 1001 && \
+    mkdir -p dist && \
+    chown -R nestjs:nodejs /usr/src/app && \
+    chmod -R 755 /usr/src/app
+
+USER nestjs
+
+EXPOSE 3000
+CMD ["sh", "-c", "rm -rf dist && npm run start:dev"]
