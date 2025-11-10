@@ -687,6 +687,7 @@ async getPriceFromKitco(): Promise<string> {
       await browser.close();
     }
   }
+  
   // 🔸 Site 3 - zioto.gold silver bars
   async getZiotoSilverBars(): Promise<string> {
     const browser = await puppeteer.launch({
