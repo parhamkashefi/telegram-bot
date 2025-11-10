@@ -1,17 +1,22 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
-import { TelegramController } from './telegram/telegram.controller';
-import { TelegramService } from './telegram/telegram.service';
-import { GoldService } from './telegram/gold.service';
-import { SilverService } from './telegram/silver.service';
+import { TelegramModule } from './telegram/telegram.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    MongooseModule.forRoot(process.env.MONGO_URI || 'mongodb://mongo:27017/sopranoBot'),
+    // use MONGODB_URI from .env; add a connectionFactory to log connection success
+    MongooseModule.forRoot(process.env.MONGODB_URI || 'mongodb://mongo:27017/sopranoBot', {
+      connectionFactory: (connection) => {
+        connection.on('connected', () => console.log('✅ Mongoose connected to', connection.host || 'mongo'));
+        connection.on('error', (err) => console.error('❌ Mongoose connection error', err));
+        return connection;
+      },
+    }),
+    TelegramModule,
   ],
-  controllers: [TelegramController],
-  providers: [TelegramService, GoldService, SilverService],
+  controllers: [],
+  providers: [],
 })
 export class AppModule {}
