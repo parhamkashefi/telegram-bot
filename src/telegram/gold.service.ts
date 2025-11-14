@@ -61,13 +61,13 @@ async getPriceFromEstjt(): Promise<string> {
 
     if (price) {
       const formattedPrice = Number(price).toLocaleString('en-US');
-      return `🟡 estjt.ir: ${formattedPrice}`;
+      return `estjt.ir: ${formattedPrice}`;
     } else {
-      return '🟡 estjt.ir: ❌ پیدا نشد';
+      return 'estjt.ir: ❌ پیدا نشد';
     }
   } catch (error) {
     console.error('Error fetching price from estjt.ir:', error);
-    return '🟡 estjt.ir: خطا در دریافت';
+    return 'estjt.ir: خطا در دریافت';
   }
 }
 
@@ -122,13 +122,13 @@ async getPriceFromEstjt(): Promise<string> {
 
     if (price) {
       const formattedPrice = Number(price).toLocaleString('en-US');
-      return `🟡 tv.tablotala.app: ${formattedPrice}`;
+      return `tv.tablotala.app: ${formattedPrice}`;
     } else {
-      return '🟡 tv.tablotala.app: ❌ پیدا نشد';
+      return 'tv.tablotala.app: ❌ پیدا نشد';
     }
   } catch (error) {
     console.error('Error fetching price from TabloTala:', error);
-    return '🟡 tv.tablotala.app: خطا در دریافت';
+    return 'tv.tablotala.app: خطا در دریافت';
   } finally {
     if (page) {
       try {
@@ -201,13 +201,13 @@ async getPriceFromTabanGohar(): Promise<string> {
     if (price) {
       // ✅ Format with commas — e.g. "100000" → "100,000"
       const formattedPrice = Number(price).toLocaleString('en-US');
-      return `🟡 tabangohar.com : ${formattedPrice}`;
+      return `tabangohar.com : ${formattedPrice}`;
     } else {
-      return '🟡 tabangohar.com : ❌ پیدا نشد';
+      return 'tabangohar.com : ❌ پیدا نشد';
     }
   } catch (error) {
     console.error('Error fetching price from tabangohar:', error);
-    return '🟡 tabangohar.com : خطا در دریافت';
+    return 'tabangohar.com : خطا در دریافت';
   } finally {
     if (page) {
       try {
@@ -236,13 +236,13 @@ async getPriceFromTabanGohar(): Promise<string> {
       const price = this.toEnglishDigits(row.find('td.value').text().trim());
 
       if (price) {
-        return `🟡  tala.ir: ${price} `;
+        return `tala.ir: ${price} `;
       } else {
-        return '🟡 tala.ir: ❌ قیمت طلا پیدا نشد';
+        return 'tala.ir: ❌ قیمت طلا پیدا نشد';
       }
     } catch (error) {
       console.error('خطا در دریافت قیمت:', error);
-      return '🟡 tala.ir: خطا در دریافت قیمت';
+      return 'tala.ir: خطا در دریافت قیمت';
     }
   }
 
@@ -278,7 +278,7 @@ async getPriceFromTabanGohar(): Promise<string> {
         selector,
         (el) => el.textContent?.trim() || '',
       );
-      return `🟡 kitco.com $ : ${text}`;
+      return `kitco.com $ : ${text}`;
     } finally {
       await browser.close();
     }
@@ -286,18 +286,14 @@ async getPriceFromTabanGohar(): Promise<string> {
 
   // output all prices
   async getAllGoldPrices(): Promise<string> {
-    const prices = await Promise.all([
-      this.getPriceFromEstjt(),
-      this.getPriceFromTabloTala(),
-      this.getPriceFromTabanGohar(),
-      this.getPriceFromTalaIr(),
-      console.log(''),
-      this.getPriceFromKitco(),
-      console.log(''),
-      this.getIranTime(),
-    ]);
+    const estjtPrice = await this.getPriceFromEstjt();
+    const tabloTalaPrice = await this.getPriceFromTabloTala();
+    const tabanGoharPrice = await this.getPriceFromTabanGohar();
+    const talaIrPrice = await this.getPriceFromTalaIr();
+    const kitcoPrice = await this.getPriceFromKitco();
+    const iranTime = this.getIranTime();
 
-    return `📊 قیمت لحظه‌ای طلای ۱۸ عیار:\n\n${prices.join('\n')}`;
-    ``;
+    const prices = [estjtPrice, tabloTalaPrice, tabanGoharPrice, talaIrPrice, '', kitcoPrice, '', iranTime];
+    return `قیمت لحظه‌ای طلای ۱۸ عیار: (تومن)\n\n${prices.join('\n')}`;
   }
 }
