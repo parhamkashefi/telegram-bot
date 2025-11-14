@@ -44,7 +44,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       const chatId = msg.chat.id;
       this.bot.sendMessage(chatId, 'سلام! به ربات سوپرانو خوش آمدید:', {
         reply_markup: {
-          keyboard: [['💰 قیمت لحظه‌ای طلا', '⚪️ قیمت لحظه‌ای نقره']],
+          keyboard: [['قیمت لحظه‌ای طلا', '⚪️ قیمت لحظه‌ای نقره']],
           resize_keyboard: true,
         },
       });
@@ -61,8 +61,11 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
           await this.sendSilverPrice(chatId);
         }
       } catch (error) {
-        console.error('❌ Error handling message:', error);
-        this.bot.sendMessage(chatId, '⚠️ خطایی رخ داد، لطفاً دوباره تلاش کنید.');
+        console.error(' Error handling message:', error);
+        this.bot.sendMessage(
+          chatId,
+          'خطایی رخ داد، لطفاً دوباره تلاش کنید.',
+        );
       }
     });
   }
@@ -79,7 +82,6 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     await this.bot.sendMessage(chatId, prices);
   }
 
-  // 🔁 Auto-send prices every 30 minutes
   private initAutoPriceSender() {
     if (!this.groupChatId) {
       console.warn('⚠️ GROUP_CHAT_ID not set in .env — auto sender disabled');
@@ -94,9 +96,12 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     }, 10_000);
 
     // Schedule every 30 minutes
-    this.autoPriceInterval = setInterval(() => {
-      this.sendCombinedPrices();
-    }, 30 * 60 * 1000); // 30 minutes
+    this.autoPriceInterval = setInterval(
+      () => {
+        this.sendCombinedPrices();
+      },
+      30 * 60 * 1000,
+    ); // 30 minutes
   }
 
   private parsePrice(price: any): number | null {
@@ -104,7 +109,9 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     if (typeof price === 'number') return price;
     if (typeof price === 'object') {
       // try to pick a numeric value from object fields
-      const vals = Object.values(price).flat ? Object.values(price).flat() : Object.values(price);
+      const vals = Object.values(price).flat
+        ? Object.values(price).flat()
+        : Object.values(price);
       for (const v of vals) {
         const n = this.parsePrice(v);
         if (n != null) return n;
@@ -113,13 +120,131 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     }
     let s = String(price);
     // replace Persian digits with Latin digits
-    const persian = ['۰','۱','۲','۳','۴','۵','۶','۷','۸','۹'];
-    for (let i = 0; i < 10; i++) s = s.replace(new RegExp(persian[i], 'g'), String(i));
+    const persian = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+    for (let i = 0; i < 10; i++)
+      s = s.replace(new RegExp(persian[i], 'g'), String(i));
     const matches = s.match(/[\d,\.]+/g);
     if (!matches) return null;
     const last = matches[matches.length - 1].replace(/,/g, '');
     const num = parseFloat(last);
     return Number.isNaN(num) ? null : num;
+  }
+
+  private toEnglishDigits(s: string): string {
+    if (!s) return s;
+    const persian = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+    const arabic = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+    let out = String(s);
+    for (let i = 0; i < 10; i++) {
+      out = out.replace(new RegExp(persian[i], 'g'), String(i));
+      out = out.replace(new RegExp(arabic[i], 'g'), String(i));
+    }
+    // normalize Persian comma and non-breaking spaces
+    out = out.replace(/٬|،|\u00A0/g, ',');
+    return out;
+  }
+
+  /**
+   * Parse a human-readable multi-line price string returned by services
+   * into structured sitePrices, weightPrices and dollarPrices.
+   */
+  private parseSitePrices(text: string): {
+    prices: Record<string, number>;
+    weightPrices: {
+      site: string;
+      weights: { weight: string; price: number; available: boolean }[];
+    }[];
+    dollarPrices: { kitcoGold?: number; kitcoSilver?: number };
+  } {
+    const prices: Record<string, number> = {};
+    const weightMap: Record<
+      string,
+      { weight: string; price: number; available: boolean }[]
+    > = {};
+    const dollarPrices: { kitcoGold?: number; kitcoSilver?: number } = {};
+    if (!text || typeof text !== 'string')
+      return { prices, weightPrices: [], dollarPrices };
+    const lines = text
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+    let currentSiteForWeights: string | null = null;
+    let lastWeightSite: string | null = null;
+    for (const raw of lines) {
+      const line = this.toEnglishDigits(raw);
+      // Kitco USD lines
+      const kitcoGoldMatch = line.match(
+        /kitco[^:\$\d]*\$?\s*[:：]?\s*([0-9\.,]+)/i,
+      );
+      if (kitcoGoldMatch) {
+        // remove thousands separators (commas) before parsing to avoid parseFloat stopping at comma
+        const rawVal = kitcoGoldMatch[1].replace(/,/g, '');
+        const val = parseFloat(rawVal);
+        if (/silver/i.test(line)) dollarPrices.kitcoSilver = Number.isNaN(val) ? 0 : val;
+        else dollarPrices.kitcoGold = Number.isNaN(val) ? 0 : val;
+        continue;
+      }
+      // Error lines
+      if (/خطا در دریافت قیمت|خطا در دریافت|error/i.test(line)) {
+        if (currentSiteForWeights && lastWeightSite) {
+          // Mark all weights as unavailable for this site
+          if (!weightMap[lastWeightSite]) weightMap[lastWeightSite] = [];
+          // Optionally, could push a dummy entry or skip
+        } else if (currentSiteForWeights) {
+          prices[currentSiteForWeights] = 0;
+        }
+        continue;
+      }
+      // Site name lines for weights
+      const siteHeaderMatch = line.match(
+        /^[🔸⚪️🟡]?\s*([a-zA-Z0-9_.\-]+)(?:\s+silver\s+bars|\s+silver\s+bar)?\s*[:：]?$/i,
+      );
+      if (siteHeaderMatch) {
+        const siteName = siteHeaderMatch[1]
+          .replace(/\./g, '_')
+          .replace(/\s+/g, '_')
+          .toLowerCase();
+        currentSiteForWeights = siteName;
+        lastWeightSite = siteName;
+        weightMap[siteName] = weightMap[siteName] || [];
+        continue;
+      }
+      // Weight line
+      const weightLineMatch = line.match(
+        /^([0-9]+\s*(g|gram|grams|oz|ounce|ounces))\s*[:：]?\s*([0-9,\.]+)\b/i,
+      );
+      if (weightLineMatch && currentSiteForWeights) {
+        const weightLabel = weightLineMatch[1];
+        const num = parseFloat(weightLineMatch[3].replace(/,/g, ''));
+        weightMap[currentSiteForWeights] =
+          weightMap[currentSiteForWeights] || [];
+        weightMap[currentSiteForWeights].push({
+          weight: weightLabel,
+          price: !Number.isNaN(num) ? num : 0,
+          available: !Number.isNaN(num),
+        });
+        continue;
+      }
+      // General site price line
+      const sitePriceMatch = line.match(
+        /^([a-zA-Z0-9_.\-]+)\s*[:：–—\-]?\s*([0-9,\.]+)(?:\s*(?:تومان|تومن|ریال|هزار تومان))?\b/i,
+      );
+      if (sitePriceMatch) {
+        let siteRaw = sitePriceMatch[1]
+          .replace(/\./g, '_')
+          .replace(/\s+/g, '_')
+          .toLowerCase();
+        const num = parseFloat(sitePriceMatch[2].replace(/,/g, ''));
+        prices[siteRaw] = !Number.isNaN(num) ? num : 0;
+        currentSiteForWeights = null;
+        continue;
+      }
+    }
+    const weightPrices = Object.keys(weightMap).map((site) => ({
+      site,
+      weights: weightMap[site],
+    }));
+    return { prices, weightPrices, dollarPrices };
   }
 
   private async sendCombinedPrices() {
@@ -141,39 +266,44 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
 
       // Persist price snapshots to MongoDB (best-effort)
       try {
-        const iranTime = new Date().toLocaleString('fa-IR', { timeZone: 'Asia/Tehran' });
+        // Parse structured data from the human-readable strings
+        const parsedGold = this.parseSitePrices(String(goldPrice));
+        const parsedSilver = this.parseSitePrices(String(silverPrice));
 
-        const goldValue = this.parsePrice(goldPrice);
-        const silverValue = this.parsePrice(silverPrice);
+        // Ensure dollar price defaults so missing kitco values are saved as 0
+        const ensureDollarDefaults = (dp: any) => ({
+          kitcoGold: dp?.kitcoGold ?? 0,
+          kitcoSilver: dp?.kitcoSilver ?? 0,
+        });
 
         const goldDoc = new this.priceModel({
           productMaterial: 'gold',
-          productType: 'ball', // gold uses 'ball' in your schema validator
-          sitePrices: goldValue != null ? { combined: goldValue } : {},
-          dollarPrices: {},
-          fetchedAtIran: iranTime,
-          fetchedAtUtc: new Date(),
+          productType: 'ball',
+          prices: parsedGold.prices,
+          // omit date fields per user request
+          dollarPrices: ensureDollarDefaults(parsedGold.dollarPrices),
         });
 
         const silverDoc = new this.priceModel({
           productMaterial: 'silver',
-          productType: 'bar', // choose 'bar' for silver snapshot (either is allowed)
-          sitePrices: silverValue != null ? { combined: silverValue } : {},
-          dollarPrices: {},
-          fetchedAtIran: iranTime,
-          fetchedAtUtc: new Date(),
+          productType: parsedSilver.weightPrices.length > 0 ? 'bar' : 'ball',
+          prices: parsedSilver.prices,
+          weightPrices: parsedSilver.weightPrices,
+          // if kitco silver missing, default to 0
+          dollarPrices: ensureDollarDefaults(parsedSilver.dollarPrices),
         });
 
         await Promise.all([goldDoc.save(), silverDoc.save()]);
         console.log('💾 Price snapshots saved to MongoDB');
       } catch (saveErr) {
-        console.error('❌ Failed to save price snapshots:', saveErr && saveErr.message ? saveErr.message : saveErr);
+        
+        console.error(
+          'Failed to save price snapshots:',
+          saveErr && saveErr.message ? saveErr.message : saveErr,
+        );
       }
     } catch (error) {
-      console.error('❌ Error sending combined prices:', error.message);
+      console.error('Error sending combined prices:', error.message);
     }
   }
 }
-
-// ------------------------- Persisting helper (below class) -------------------------
-
