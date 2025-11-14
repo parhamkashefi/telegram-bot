@@ -40,6 +40,7 @@ export class SilverService {
   }
 
   // 🔸 Site 1 - shirazsilver.com
+  //namojod
   async getPriceFromShirazSilver() {
     let browser = await puppeteer.launch({
       headless: true,
@@ -89,7 +90,7 @@ export class SilverService {
       }
 
       if (!priceText) {
-        return '⚪️ shirazsilver.com: ❌ قیمت یافت نشد';
+        return 'shirazsilver.com: ❌ قیمت یافت نشد';
       }
 
       // Convert Persian digits to English and clean
@@ -100,22 +101,22 @@ export class SilverService {
       const cleanedPrice = persianToEnglish(priceText).replace(/[^\d]/g, '');
 
       if (!cleanedPrice) {
-        return '⚪️ shirazsilver.com: ❌ قیمت نامعتبر';
+        return 'shirazsilver.com: ❌ قیمت نامعتبر';
       }
 
       const price = parseInt(cleanedPrice, 10);
 
       if (isNaN(price)) {
-        return '⚪️ shirazsilver.com: ❌ قیمت نامعتبر';
+        return 'shirazsilver.com: ❌ قیمت نامعتبر';
       }
 
       const dividedPrice = Math.floor(price / 10).toLocaleString('en-US');
 
-      return `⚪️ shirazsilver.com: ${dividedPrice} تومان`;
+      return `shirazsilver.com: ${dividedPrice}`;
 
     } catch (error) {
       console.error('❌ Error fetching ShirazSilver price:', error);
-      return '⚪️ shirazsilver.com: خطا در دریافت قیمت';
+      return 'shirazsilver.com: خطا در دریافت قیمت';
     } finally {
       if (browser) {
         await browser.close();
@@ -158,16 +159,16 @@ export class SilverService {
       await browser.close();
 
       const cleaned = priceText.replace(/[^0-9]/g, '');
-      if (!cleaned) return '⚪️ sarzamineshemsh.ir: ❌ قیمت یافت نشد';
+      if (!cleaned) return 'sarzamineshemsh.ir: ❌ قیمت یافت نشد';
 
       const price = parseInt(cleaned, 10);
       const divided = Math.floor(price / 100);
       const formatted = divided.toLocaleString('en-US');
 
-      return `⚪️ sarzamineshemsh.ir(عیار 995): ${formatted} تومان`;
+      return `sarzamineshemsh.ir (عیار 995): ${formatted}`;
     } catch (err) {
       console.error('❌ Error fetching SarzaminShems price:', err);
-      return '⚪️ sarzamineshemsh.ir: خطا در دریافت قیمت';
+      return 'sarzamineshemsh.ir: خطا در دریافت قیمت';
     }
   }
 
@@ -187,13 +188,13 @@ export class SilverService {
         '',
       );
       if (!cleanedPrice) {
-        return '⚪️ noghra.com: ❌ قیمت یافت نشد';
+        return 'noghra.com: ❌ قیمت یافت نشد';
       }
 
-      return `⚪️ noghra.com: ${cleanedPrice} تومان`;
+      return `noghra.com: ${cleanedPrice}`;
     } catch (error) {
       console.error('❌ Error fetching Noghra price:', error);
-      return '⚪️ noghra.com: خطا در دریافت قیمت';
+      return 'noghra.com: خطا در دریافت قیمت';
     }
   }
 
@@ -217,17 +218,17 @@ export class SilverService {
       );
 
       if (!cleanedPrice) {
-        return '⚪️ tokeniko.com: ❌ قیمت یافت نشد';
+        return 'tokeniko.com: ❌ قیمت یافت نشد';
       }
 
       const totalPrice = parseInt(cleanedPrice, 10); // قیمت برای ۱ اونس
       const perGramPrice = Math.floor(totalPrice / 31.1035); // قیمت هر گرم
       const formattedPrice = this.formatNumber(perGramPrice);
 
-      return `⚪️ tokeniko.com: ${formattedPrice} تومان`;
+      return `tokeniko.com: ${formattedPrice}`;
     } catch (error) {
       console.error('❌ Error fetching Tokeniko 1oz price:', error);
-      return '⚪️ tokeniko.com: خطا در دریافت قیمت';
+      return 'tokeniko.com: خطا در دریافت قیمت';
     }
   }
 
@@ -306,7 +307,7 @@ export class SilverService {
       }
 
       if (!priceText) {
-        return '⚪️ silverin.ir: ❌ قیمت یافت نشد';
+        return 'silverin.ir: ❌ قیمت یافت نشد';
       }
 
       // Remove non-digits and convert Persian digits to English digits
@@ -316,23 +317,23 @@ export class SilverService {
       const cleanedPrice = persianToEnglishDigits(priceText).replace(/[^\d]/g, '');
 
       if (!cleanedPrice) {
-        return '⚪️ silverin.ir: ❌ قیمت نامعتبر';
+        return 'silverin.ir: ❌ قیمت نامعتبر';
       }
 
       const price = parseInt(cleanedPrice, 10);
 
       if (isNaN(price)) {
-        return '⚪️ silverin.ir: ❌ قیمت نامعتبر';
+        return 'silverin.ir: ❌ قیمت نامعتبر';
       }
 
       // Adjust division factor based on typical silver prices
       const dividedPrice = Math.floor(price / (price > 100000 ? 10 : 1)).toLocaleString();
 
-      return `⚪️ silverin.ir: ${dividedPrice} تومان`;
+      return `silverin.ir: ${dividedPrice}`;
 
     } catch (err) {
       console.error('❌ Error fetching Silverin price:', err);
-      return '⚪️ silverin.ir: خطا در دریافت قیمت';
+      return 'silverin.ir: خطا در دریافت قیمت';
     } finally {
       if (browser) {
         await browser.close();
@@ -394,19 +395,19 @@ export class SilverService {
       const cleaned = priceText.replace(/[^0-9,]/g, '');
 
       if (!cleaned) {
-        return '⚪️ noghresea.ir: ❌ قیمت یافت نشد';
+        return 'noghresea.ir: ❌ قیمت یافت نشد';
       }
 
       const numericPrice = cleaned.replace(/,/g, '');
 
       if (!numericPrice || isNaN(parseInt(numericPrice, 10))) {
-        return '⚪️ noghresea.ir: ❌ قیمت نامعتبر';
+        return 'noghresea.ir: ❌ قیمت نامعتبر';
       }
 
-      return `⚪️ noghresea.ir: ${cleaned} تومان`;
+      return `noghresea.ir: ${cleaned}`;
     } catch (err) {
       console.error('❌ Error fetching NoghreGea price:', err);
-      return '⚪️ noghresea.ir: خطا در دریافت قیمت';
+      return 'noghresea.ir: خطا در دریافت قیمت';
     }
   }
 
@@ -460,19 +461,19 @@ export class SilverService {
       const cleaned = priceText.replace(/[^0-9,]/g, '');
 
       if (!cleaned) {
-        return '⚪️ tajnoghreh.com: ❌ قیمت یافت نشد';
+        return 'tajnoghreh.com: ❌ قیمت یافت نشد';
       }
 
       const numericPrice = cleaned.replace(/,/g, '');
 
       if (!numericPrice || isNaN(parseInt(numericPrice, 10))) {
-        return '⚪️ tajnoghreh.com: ❌ قیمت نامعتبر';
+        return 'tajnoghreh.com: ❌ قیمت نامعتبر';
       }
 
-      return `⚪️ tajnoghreh.com: ${cleaned} تومان`;
+      return `tajnoghreh.com: ${cleaned}`;
     } catch (err) {
       console.error('❌ Error fetching TajNoghre price:', err);
-      return '⚪️ tajnoghreh.com: خطا در دریافت قیمت';
+      return 'tajnoghreh.com: خطا در دریافت قیمت';
     }
   }
 
@@ -499,14 +500,14 @@ async getPriceFromKitco(): Promise<string> {
     
     if (priceMatch) {
       const price = priceMatch[0].replace('$', '');
-      return `⚪️ kitco.com $ : ${price}`;
+      return `kitco.com $ : ${price}`;
     }
     
     throw new Error('Silver price not found');
     
   } catch (err) {
     console.error('Error:', err);
-    return '⚪️ kitco.com : خطا در دریافت';
+    return 'kitco.com : خطا در دریافت';
   } finally {
     if (browser) await browser.close();
   }
@@ -596,7 +597,7 @@ async getPriceFromKitco(): Promise<string> {
     await browser.close();
 
     // Final formatted output
-    return `⚪️ tokeniko.com silver bars : \n${prices.join('\n')}`;
+    return `tokeniko.com silver bars : \n${prices.join('\n')}`;
   }
 
   // 🔸 Site 2 - parsisgold.com silver bars
@@ -663,7 +664,7 @@ async getPriceFromKitco(): Promise<string> {
       const cleaned = price.replace(/[^0-9۰-۹,٠-٩]/g, '');
 
       if (!cleaned) {
-        return '⚪️ parsisgold.com silver bar : ❌ قیمت یافت نشد';
+        return 'parsisgold.com silver bar :  قیمت یافت نشد';
       }
 
       // Convert Persian/Arabic digits to English digits
@@ -673,16 +674,16 @@ async getPriceFromKitco(): Promise<string> {
       const numericPrice = parseInt(englishDigits.replace(/,/g, ''), 10);
 
       if (isNaN(numericPrice)) {
-        return '⚪️ parsisgold.com silver bar : ❌ قیمت یافت نشد';
+        return 'parsisgold.com silver bar :  قیمت یافت نشد';
       }
 
       // Format the number with commas
       const formattedPrice = this.formatNumber(numericPrice);
 
-      return `⚪️ parsisgold.com silver bar : ${formattedPrice}`;
+      return `parsisgold.com silver bar : ${formattedPrice}`;
     } catch (err) {
       console.error('Parsis scrape error:', err);
-      return '⚪️ parsisgold.com silver bar : خطا در دریافت';
+      return 'parsisgold.com silver bar : خطا در دریافت';
     } finally {
       await browser.close();
     }
@@ -776,10 +777,10 @@ async getPriceFromKitco(): Promise<string> {
         );
       }
 
-      return `⚪ zioto.gold silver bars:\n\n${results.join('\n')}`;
+      return `zioto.gold silver bars:\n\n${results.join('\n')}`;
     } catch (err) {
       console.error('Zioto scrape error:', err);
-      return '⚪ zioto.gold: خطا در دریافت';
+      return 'zioto.gold: خطا در دریافت';
     } finally {
       await browser.close();
     }
@@ -788,7 +789,7 @@ async getPriceFromKitco(): Promise<string> {
   // //output all prices
   async getAllSilverPrices(): Promise<string> {
     const priceMethods = [
-      () => this.getPriceFromShirazSilver(),
+      // () => this.getPriceFromShirazSilver(),
       () => this.getPriceFromSarzaminShems(),
       () => this.getPriceFromNoghra(),
       () => this.getPriceFromTokeniko(),
@@ -798,7 +799,7 @@ async getPriceFromKitco(): Promise<string> {
       () => this.getSilverBarPriceFromTokeniko(),
       () => this.getSilverBarPriceFromParsis(),
       () => this.getZiotoSilverBars(),
-      () => this.getPriceFromKitco(),
+      // () => this.getPriceFromKitco(),
     ];
 
     // Execute each method with individual error handling
@@ -807,7 +808,7 @@ async getPriceFromKitco(): Promise<string> {
         return await method();
       } catch (error) {
         console.error(`Error in price method:`, error.message);
-        return `❌ خطا در دریافت قیمت`;
+        return ` خطا در دریافت قیمت`;
       }
     });
 
@@ -815,6 +816,6 @@ async getPriceFromKitco(): Promise<string> {
     prices.push(this.getIranTime());
 
     // Add double newline between each item for spacing
-    return `📊 قیمت لحظه‌ای نقره:\n\n${prices.join('\n\n')}`;
+    return ` قیمت لحظه‌ای نقره: (تومن) \n\n${prices.join('\n\n')}`;
   }
 }
