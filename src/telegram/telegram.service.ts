@@ -148,104 +148,140 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
    * Parse a human-readable multi-line price string returned by services
    * into structured sitePrices, weightPrices and dollarPrices.
    */
-  private parseSitePrices(text: string): {
-    prices: Record<string, number>;
-    weightPrices: {
-      site: string;
-      weights: { weight: string; price: number; available: boolean }[];
-    }[];
-    dollarPrices: { kitcoGold?: number; kitcoSilver?: number };
-  } {
-    const prices: Record<string, number> = {};
-    const weightMap: Record<
-      string,
-      { weight: string; price: number; available: boolean }[]
-    > = {};
-    const dollarPrices: { kitcoGold?: number; kitcoSilver?: number } = {};
-    if (!text || typeof text !== 'string')
-      return { prices, weightPrices: [], dollarPrices };
-    const lines = text
-      .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter(Boolean);
-    let currentSiteForWeights: string | null = null;
-    let lastWeightSite: string | null = null;
-    for (const raw of lines) {
-      const line = this.toEnglishDigits(raw);
-      // Kitco USD lines
-      const kitcoGoldMatch = line.match(
-        /kitco[^:\$\d]*\$?\s*[:：]?\s*([0-9\.,]+)/i,
-      );
-      if (kitcoGoldMatch) {
-        // remove thousands separators (commas) before parsing to avoid parseFloat stopping at comma
-        const rawVal = kitcoGoldMatch[1].replace(/,/g, '');
-        const val = parseFloat(rawVal);
-        if (/silver/i.test(line)) dollarPrices.kitcoSilver = Number.isNaN(val) ? 0 : val;
-        else dollarPrices.kitcoGold = Number.isNaN(val) ? 0 : val;
-        continue;
-      }
-      // Error lines
-      if (/خطا در دریافت قیمت|خطا در دریافت|error/i.test(line)) {
-        if (currentSiteForWeights && lastWeightSite) {
-          // Mark all weights as unavailable for this site
-          if (!weightMap[lastWeightSite]) weightMap[lastWeightSite] = [];
-          // Optionally, could push a dummy entry or skip
-        } else if (currentSiteForWeights) {
-          prices[currentSiteForWeights] = 0;
-        }
-        continue;
-      }
-      // Site name lines for weights
-      const siteHeaderMatch = line.match(
-        /^[🔸⚪️🟡]?\s*([a-zA-Z0-9_.\-]+)(?:\s+silver\s+bars|\s+silver\s+bar)?\s*[:：]?$/i,
-      );
-      if (siteHeaderMatch) {
-        const siteName = siteHeaderMatch[1]
-          .replace(/\./g, '_')
-          .replace(/\s+/g, '_')
-          .toLowerCase();
-        currentSiteForWeights = siteName;
-        lastWeightSite = siteName;
-        weightMap[siteName] = weightMap[siteName] || [];
-        continue;
-      }
-      // Weight line
-      const weightLineMatch = line.match(
-        /^([0-9]+\s*(g|gram|grams|oz|ounce|ounces))\s*[:：]?\s*([0-9,\.]+)\b/i,
-      );
-      if (weightLineMatch && currentSiteForWeights) {
-        const weightLabel = weightLineMatch[1];
-        const num = parseFloat(weightLineMatch[3].replace(/,/g, ''));
-        weightMap[currentSiteForWeights] =
-          weightMap[currentSiteForWeights] || [];
-        weightMap[currentSiteForWeights].push({
-          weight: weightLabel,
-          price: !Number.isNaN(num) ? num : 0,
-          available: !Number.isNaN(num),
-        });
-        continue;
-      }
-      // General site price line
-      const sitePriceMatch = line.match(
-        /^([a-zA-Z0-9_.\-]+)\s*[:：–—\-]?\s*([0-9,\.]+)(?:\s*(?:تومان|تومن|ریال|هزار تومان))?\b/i,
-      );
-      if (sitePriceMatch) {
-        let siteRaw = sitePriceMatch[1]
-          .replace(/\./g, '_')
-          .replace(/\s+/g, '_')
-          .toLowerCase();
-        const num = parseFloat(sitePriceMatch[2].replace(/,/g, ''));
-        prices[siteRaw] = !Number.isNaN(num) ? num : 0;
-        currentSiteForWeights = null;
-        continue;
-      }
-    }
-    const weightPrices = Object.keys(weightMap).map((site) => ({
-      site,
-      weights: weightMap[site],
-    }));
-    return { prices, weightPrices, dollarPrices };
+private parseSitePrices(text: string): {
+  prices: Record<string, number>;
+  weightPrices: {
+    site: string;
+    weights: { weight: string; price: number; available: boolean }[];
+  }[];
+  dollarPrices: { kitcoGold?: number; kitcoSilver?: number };
+} {
+  const prices: Record<string, number> = {};
+  const weightMap: Record<
+    string,
+    { weight: string; price: number; available: boolean }[]
+  > = {};
+
+  const dollarPrices: { kitcoGold?: number; kitcoSilver?: number } = {};
+
+  if (!text || typeof text !== "string") {
+    return { prices, weightPrices: [], dollarPrices };
   }
+
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  let currentSiteForWeights: string | null = null;
+  let lastWeightSite: string | null = null;
+
+  for (const raw of lines) {
+    const line = this.toEnglishDigits(raw);
+
+    /** -----------------------------
+     *  KITCO (USD) PRICE LINES
+     * ----------------------------- */
+    const kitcoGoldMatch = line.match(
+      /kitco[^:\$\d]*\$?\s*[:：]?\s*([0-9\.,]+)/i
+    );
+    if (kitcoGoldMatch) {
+      const rawVal = kitcoGoldMatch[1].replace(/,/g, "");
+      const val = parseFloat(rawVal);
+
+      if (/silver/i.test(line)) {
+        dollarPrices.kitcoSilver = Number.isNaN(val) ? 0 : val;
+      } else {
+        dollarPrices.kitcoGold = Number.isNaN(val) ? 0 : val;
+      }
+      continue;
+    }
+
+    /** -----------------------------
+     *  ERROR LINES
+     * ----------------------------- */
+    if (/خطا در دریافت|error/i.test(line)) {
+      if (currentSiteForWeights && lastWeightSite) {
+        if (!weightMap[lastWeightSite]) weightMap[lastWeightSite] = [];
+      } else if (currentSiteForWeights) {
+        prices[currentSiteForWeights] = 0;
+      }
+      continue;
+    }
+
+    /** -----------------------------
+     *  WEIGHT SITE HEADER
+     * ----------------------------- */
+    const siteHeaderMatch = line.match(
+      /^[🔸⚪️🟡]?\s*([a-zA-Z0-9_.\-]+)(?:\s+silver\s+bars|\s+silver\s+bar)?\s*[:：]?$/i
+    );
+    if (siteHeaderMatch) {
+      const siteName = siteHeaderMatch[1]
+        .replace(/\./g, "_")
+        .replace(/\s+/g, "_")
+        .toLowerCase();
+
+      currentSiteForWeights = siteName;
+      lastWeightSite = siteName;
+
+      if (!weightMap[siteName]) weightMap[siteName] = [];
+
+      continue;
+    }
+
+    /** -----------------------------
+     *  WEIGHT LINES
+     * ----------------------------- */
+    const weightLineMatch = line.match(
+      /^([0-9]+\s*(g|gram|grams|oz|ounce|ounces))\s*[:：]?\s*([0-9,\.]+)\b/i
+    );
+
+    if (weightLineMatch && currentSiteForWeights) {
+      const weightLabel = weightLineMatch[1];
+      const num = parseFloat(weightLineMatch[3].replace(/,/g, ""));
+
+      weightMap[currentSiteForWeights].push({
+        weight: weightLabel,
+        price: Number.isNaN(num) ? 0 : num,
+        available: !Number.isNaN(num),
+      });
+
+      continue;
+    }
+
+    /** -----------------------------------------------------
+     *  FIXED GENERAL PRICE LINE (YOUR REQUESTED CODE HERE)
+     * ----------------------------------------------------- */
+    const fixedSiteMatch = line.match(
+      /^([a-zA-Z0-9_.\-]+)(?:\s*\([^)]*\))?(?:\s+silver\s+bar|\s+silver\s+bars)?\s*[:：–—\-]?\s*([0-9,\.]+)\b/i
+    );
+
+    if (fixedSiteMatch) {
+      let siteRaw = fixedSiteMatch[1]
+        .replace(/\./g, "_")
+        .replace(/\s+/g, "_")
+        .toLowerCase();
+
+      const num = parseFloat(fixedSiteMatch[2].replace(/,/g, ""));
+
+      prices[siteRaw] = Number.isNaN(num) ? 0 : num;
+
+      currentSiteForWeights = null;
+      continue;
+    }
+  }
+
+  /** -----------------------------
+   *  FINAL STRUCTURED OUTPUT
+   * ----------------------------- */
+  const weightPrices = Object.keys(weightMap).map((site) => ({
+    site,
+    weights: weightMap[site],
+  }));
+
+  return { prices, weightPrices, dollarPrices };
+}
+
 
   private async sendCombinedPrices() {
     try {
