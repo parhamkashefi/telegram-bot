@@ -5,10 +5,29 @@ import axios from 'axios';
 import * as cheerio from 'cheerio';
 import moment from 'moment-timezone';
 import * as jalaali from 'jalaali-js';
-import puppeteer from 'puppeteer';
+import puppeteer, { Browser, Page } from 'puppeteer';
+
 @Injectable()
 export class GoldService {
   private bot: TelegramBot;
+  private readonly browserArgs = [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
+    '--disable-accelerated-2d-canvas',
+    '--no-first-run',
+    '--no-zygote',
+    '--single-process',
+    '--disable-gpu',
+    '--disable-features=VizDisplayCompositor',
+    '--disable-software-rasterizer',
+  ];
+  private readonly browserConfig = {
+    headless: true,
+    args: this.browserArgs,
+    timeout: 60000,
+  };
+
   constructor(private readonly configService: ConfigService) { }
 
   // persian to english (number)
@@ -22,9 +41,8 @@ export class GoldService {
 
   getIranTime(): string {
     const now = moment().tz('Asia/Tehran');
-
     const gYear = now.year();
-    const gMonth = now.month() + 1; // ماه در moment صفر-بیسه
+    const gMonth = now.month() + 1;
     const gDay = now.date();
 
     const jDate = jalaali.toJalaali(gYear, gMonth, gDay);
@@ -34,197 +52,149 @@ export class GoldService {
     return `🕰 ${date} - ${time} (به وقت تهران)`;
   }
 
-  // 🔸 Site 1 - estjt.ir
-async getPriceFromEstjt(): Promise<string> {
-  try {
-    const { data } = await axios.get('https://www.estjt.ir/price/', {
-      timeout: 30000,
-    });
-
-    const $ = cheerio.load(data);
-    let price: string | null = null;
-
-    $('tbody tr').each((_, tr) => {
-      const tds = $(tr).find('td');
-      const title = tds.eq(0).text().trim();
-      const value = tds.eq(1).text().trim();
-
-      if (title.includes('طلای ۱۸')) {
-        // Remove non-digit characters and convert Persian digits if needed
-        const cleanValue = value.replace(/[^\d۰-۹]/g, '');
-        const englishValue = cleanValue.replace(/[۰-۹]/g, (d) =>
-          String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))
-        );
-        price = englishValue;
+  private async safeClosePage(page: Page | null): Promise<void> {
+    if (page) {
+      try {
+        await page.close();
+      } catch (err) {
+        console.error('Error closing page:', err);
       }
-    });
-
-    if (price) {
-      const formattedPrice = Number(price).toLocaleString('en-US');
-      return `estjt.ir: ${formattedPrice}`;
-    } else {
-      return 'estjt.ir: ❌ پیدا نشد';
     }
-  } catch (error) {
-    console.error('Error fetching price from estjt.ir:', error);
-    return 'estjt.ir: خطا در دریافت';
   }
-}
+
+  private async safeCloseBrowser(browser: Browser | null): Promise<void> {
+    if (browser) {
+      try {
+        await browser.close();
+      } catch (err) {
+        console.error('Error closing browser:', err);
+      }
+    }
+  }
+
+  private formatPrice(price: string): string {
+    return Number(price).toLocaleString('en-US');
+  }
+
+  // 🔸 Site 1 - estjt.ir
+  async getPriceFromEstjt(): Promise<string> {
+    try {
+      const { data } = await axios.get('https://www.estjt.ir/price/', {
+        timeout: 30000,
+      });
+
+      const $ = cheerio.load(data);
+      let price: string | null = null;
+
+      $('tbody tr').each((_, tr) => {
+        const tds = $(tr).find('td');
+        const title = tds.eq(0).text().trim();
+        const value = tds.eq(1).text().trim();
+
+        if (title.includes('طلای ۱۸')) {
+          const cleanValue = value.replace(/[^\d۰-۹]/g, '');
+          const englishValue = cleanValue.replace(/[۰-۹]/g, (d) =>
+            String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))
+          );
+          price = englishValue;
+        }
+      });
+
+      return price 
+        ? `estjt.ir: ${this.formatPrice(price)}`
+        : 'estjt.ir: ❌ پیدا نشد';
+    } catch (error) {
+      console.error('Error fetching price from estjt.ir:', error);
+      return 'estjt.ir: خطا در دریافت';
+    }
+  }
 
   // 🔸 Site 2 - tablotala.app
- async getPriceFromTabloTala(): Promise<string> {
-  let browser;
-  let page;
+  async getPriceFromTabloTala(): Promise<string> {
+    let browser: Browser | null = null;
+    let page: Page | null = null;
 
-  try {
-    browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--single-process',
-        '--disable-gpu',
-        '--disable-features=VizDisplayCompositor',
-        '--disable-software-rasterizer',
-      ],
-      timeout: 60000,
-    });
+    try {
+      browser = await puppeteer.launch(this.browserConfig);
+      page = await browser.newPage();
 
-    page = await browser.newPage();
+      await page.goto('https://tv.tablotala.app/#/home', {
+        waitUntil: 'networkidle0',
+        timeout: 60000,
+      });
 
-    await page.goto('https://tv.tablotala.app/#/home', {
-      waitUntil: 'networkidle0',
-      timeout: 60000,
-    });
+      await page.waitForSelector('body', { timeout: 10000 });
 
-    await page.waitForSelector('body', { timeout: 10000 });
+      const price = await page.evaluate(() => {
+        const xpath = '/html/body/div/div[2]/div[2]/div[5]/div/span';
+        const result = document.evaluate(
+          xpath,
+          document,
+          null,
+          XPathResult.FIRST_ORDERED_NODE_TYPE,
+          null
+        );
+        const element = result.singleNodeValue as HTMLElement | null;
+        if (!element) return null;
 
-    const price = await page.evaluate(() => {
-      const xpath = '/html/body/div/div[2]/div[2]/div[5]/div/span';
-      const result = document.evaluate(
-        xpath,
-        document,
-        null,
-        XPathResult.FIRST_ORDERED_NODE_TYPE,
-        null
-      );
-      const element = result.singleNodeValue as HTMLElement | null;
-      if (!element) return null;
+        const rawText = (element.textContent || '').trim();
+        return rawText.replace(/[^\d]/g, '') || null;
+      });
 
-      const rawText = (element.textContent || '').trim();
-      const digits = rawText.replace(/[^\d]/g, ''); // keep only numbers
-      return digits || null;
-    });
-
-    if (price) {
-      const formattedPrice = Number(price).toLocaleString('en-US');
-      return `tv.tablotala.app: ${formattedPrice}`;
-    } else {
-      return 'tv.tablotala.app: ❌ پیدا نشد';
-    }
-  } catch (error) {
-    console.error('Error fetching price from TabloTala:', error);
-    return 'tv.tablotala.app: خطا در دریافت';
-  } finally {
-    if (page) {
-      try {
-        await page.close();
-      } catch (err) {
-        console.error('Error closing page:', err);
-      }
-    }
-    if (browser) {
-      try {
-        await browser.close();
-      } catch (err) {
-        console.error('Error closing browser:', err);
-      }
+      return price
+        ? `tv.tablotala.app: ${this.formatPrice(price)}`
+        : 'tv.tablotala.app: ❌ پیدا نشد';
+    } catch (error) {
+      console.error('Error fetching price from TabloTala:', error);
+      return 'tv.tablotala.app: خطا در دریافت';
+    } finally {
+      await this.safeClosePage(page);
+      await this.safeCloseBrowser(browser);
     }
   }
-}
 
   // 🔸 Site 3 - tabangohar.com
-async getPriceFromTabanGohar(): Promise<string> {
-  let browser;
-  let page;
+  async getPriceFromTabanGohar(): Promise<string> {
+    let browser: Browser | null = null;
+    let page: Page | null = null;
 
-  try {
-    browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--single-process',
-        '--disable-gpu',
-        '--disable-features=VizDisplayCompositor',
-        '--disable-software-rasterizer',
-      ],
-      timeout: 60000,
-    });
+    try {
+      browser = await puppeteer.launch(this.browserConfig);
+      page = await browser.newPage();
+      
+      await page.goto('https://tabangohar.com/', {
+        waitUntil: 'domcontentloaded',
+      });
 
-    page = await browser.newPage();
-    await page.goto('https://tabangohar.com/', {
-      waitUntil: 'domcontentloaded',
-    });
+      await page.waitForSelector('body', { timeout: 60000 });
 
-    await page.waitForSelector('body', { timeout: 60000 });
+      const price = await page.evaluate(() => {
+        const xpath = '/html/body/main/div/div/section[4]/div[2]/div[1]/div/div[4]/div/div';
+        const result = document.evaluate(
+          xpath,
+          document,
+          null,
+          XPathResult.FIRST_ORDERED_NODE_TYPE,
+          null
+        );
+        const element = result.singleNodeValue as HTMLElement | null;
+        if (!element) return null;
 
-    const price = await page.evaluate(() => {
-      const xpath =
-        '/html/body/main/div/div/section[4]/div[2]/div[1]/div/div[4]/div/div';
-      const result = document.evaluate(
-        xpath,
-        document,
-        null,
-        XPathResult.FIRST_ORDERED_NODE_TYPE,
-        null
-      );
-      const element = result.singleNodeValue as HTMLElement | null;
-      if (!element) return null;
+        const rawText = (element.textContent || '').trim();
+        return rawText.replace(/[^\d]/g, '') || null;
+      });
 
-      const rawText = (element.textContent || '').trim();
-
-      // extract digits only (e.g. "۱۰۰۰۰۰" → "100000")
-      const digits = rawText.replace(/[^\d]/g, '');
-
-      return digits || null;
-    });
-
-    if (price) {
-      // ✅ Format with commas — e.g. "100000" → "100,000"
-      const formattedPrice = Number(price).toLocaleString('en-US');
-      return `tabangohar.com : ${formattedPrice}`;
-    } else {
-      return 'tabangohar.com : ❌ پیدا نشد';
-    }
-  } catch (error) {
-    console.error('Error fetching price from tabangohar:', error);
-    return 'tabangohar.com : خطا در دریافت';
-  } finally {
-    if (page) {
-      try {
-        await page.close();
-      } catch (err) {
-        console.error('Error closing page:', err);
-      }
-    }
-    if (browser) {
-      try {
-        await browser.close();
-      } catch (err) {
-        console.error('Error closing browser:', err);
-      }
+      return price
+        ? `tabangohar.com : ${this.formatPrice(price)}`
+        : 'tabangohar.com : ❌ پیدا نشد';
+    } catch (error) {
+      console.error('Error fetching price from tabangohar:', error);
+      return 'tabangohar.com : خطا در دریافت';
+    } finally {
+      await this.safeClosePage(page);
+      await this.safeCloseBrowser(browser);
     }
   }
-}
 
   // 🔸 Site 4 - tala.ir
   async getPriceFromTalaIr(): Promise<string> {
@@ -235,11 +205,9 @@ async getPriceFromTabanGohar(): Promise<string> {
       const row = $('tr.gold_18k');
       const price = this.toEnglishDigits(row.find('td.value').text().trim());
 
-      if (price) {
-        return `tala.ir: ${price} `;
-      } else {
-        return 'tala.ir: ❌ قیمت طلا پیدا نشد';
-      }
+      return price
+        ? `tala.ir: ${price} `
+        : 'tala.ir: ❌ قیمت طلا پیدا نشد';
     } catch (error) {
       console.error('خطا در دریافت قیمت:', error);
       return 'tala.ir: خطا در دریافت قیمت';
@@ -248,30 +216,15 @@ async getPriceFromTabanGohar(): Promise<string> {
 
   // 🔸 Site 5 - kitco.com
   async getPriceFromKitco(): Promise<string> {
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--single-process',
-        '--disable-gpu',
-        '--disable-features=VizDisplayCompositor',
-        '--disable-software-rasterizer',
-      ], timeout: 60000,
-    });
+    const browser = await puppeteer.launch(this.browserConfig);
+    
     try {
       const page = await browser.newPage();
       await page.goto('https://www.kitco.com/', {
         waitUntil: 'domcontentloaded',
       });
 
-      // gold element (first box on left side)
-      const selector =
-        'main div.flex > div:nth-child(1) div.text-right.font-medium';
+      const selector = 'main div.flex > div:nth-child(1) div.text-right.font-medium';
       await page.waitForSelector(selector);
 
       const text = await page.$eval(
@@ -280,20 +233,39 @@ async getPriceFromTabanGohar(): Promise<string> {
       );
       return `kitco.com $ : ${text}`;
     } finally {
-      await browser.close();
+      await this.safeCloseBrowser(browser);
     }
   }
 
   // output all prices
   async getAllGoldPrices(): Promise<string> {
-    const estjtPrice = await this.getPriceFromEstjt();
-    const tabloTalaPrice = await this.getPriceFromTabloTala();
-    const tabanGoharPrice = await this.getPriceFromTabanGohar();
-    const talaIrPrice = await this.getPriceFromTalaIr();
-    const kitcoPrice = await this.getPriceFromKitco();
+    const [
+      estjtPrice,
+      tabloTalaPrice,
+      tabanGoharPrice,
+      talaIrPrice,
+      kitcoPrice
+    ] = await Promise.all([
+      this.getPriceFromEstjt(),
+      this.getPriceFromTabloTala(),
+      this.getPriceFromTabanGohar(),
+      this.getPriceFromTalaIr(),
+      this.getPriceFromKitco()
+    ]);
+
     const iranTime = this.getIranTime();
 
-    const prices = [estjtPrice, tabloTalaPrice, tabanGoharPrice, talaIrPrice, '', kitcoPrice, '', iranTime];
+    const prices = [
+      estjtPrice, 
+      tabloTalaPrice, 
+      tabanGoharPrice, 
+      talaIrPrice, 
+      '', 
+      kitcoPrice, 
+      '', 
+      iranTime
+    ];
+    
     return `قیمت لحظه‌ای طلای ۱۸ عیار: (تومن)\n\n${prices.join('\n')}`;
   }
 }
