@@ -1,19 +1,21 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class AuthService {
-  private adminUser = {
-    username: 'parham',
-    password: 'parham',
-  };
-
-  constructor(private readonly jwtService: JwtService) {}
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
+  ) {}
 
   validateAdmin(username: string, password: string): boolean {
+    const adminUsername = this.configService.get<string>('ADMIN_USERNAME');
+    const adminPassword = this.configService.get<string>('ADMIN_PASSWORD');
+    
     return (
-      username === this.adminUser.username &&
-      password === this.adminUser.password
+      username === adminUsername &&
+      password === adminPassword
     );
   }
 
