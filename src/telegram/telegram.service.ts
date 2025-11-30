@@ -44,7 +44,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       const chatId = msg.chat.id;
       this.bot.sendMessage(chatId, 'سلام! به ربات سوپرانو خوش آمدید:', {
         reply_markup: {
-          keyboard: [['قیمت لحظه‌ای طلا', '⚪️ قیمت لحظه‌ای نقره']],
+          keyboard: [['💰 قیمت لحظه‌ای طلا', '⚪️ قیمت لحظه‌ای نقره']],
           resize_keyboard: true,
         },
       });
@@ -62,12 +62,69 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         }
       } catch (error) {
         console.error(' Error handling message:', error);
-        this.bot.sendMessage(
-          chatId,
-          'خطایی رخ داد، لطفاً دوباره تلاش کنید.',
-        );
+        this.bot.sendMessage(chatId, 'خطایی رخ داد، لطفاً دوباره تلاش کنید.');
       }
     });
+  }
+
+  async getPreviousSilverFromDB(): Promise<PriceDocument | null> {
+    try {
+      const previous = await this.priceModel
+        .find({ productMaterial: 'silver' })
+        .sort({ createdAt: -1 }) // newest → oldest
+        .skip(1) // skip newest, get the one before it
+        .limit(1)
+        .exec();
+
+      return previous[0] || null;
+    } catch (error) {
+      console.error('❌ Error fetching previous silver from DB:', error);
+      return null;
+    }
+  }
+
+  async getNewestSilverFromDB(): Promise<PriceDocument | null> {
+    try {
+      const newest = await this.priceModel
+        .findOne({ productMaterial: 'silver' })
+        .sort({ createdAt: -1 }) // newest first
+        .exec();
+
+      return newest;
+    } catch (error) {
+      console.error('❌ Error fetching NEWEST gold from DB:', error);
+      return null;
+    }
+  }
+
+  async getPreviousGoldFromDB(): Promise<PriceDocument | null> {
+    try {
+      const previous = await this.priceModel
+        .find({ productMaterial: 'gold' })
+        .sort({ createdAt: -1 }) // newest → oldest
+        .skip(1) // skip newest, get the one before it
+        .limit(1)
+        .exec();
+
+      return previous[0] || null;
+    } catch (error) {
+      console.error('❌ Error fetching previous gold from DB:', error);
+      return null;
+    }
+  }
+
+  async getNewestGoldFromDB(): Promise<PriceDocument | null> {
+    try {
+      const newest = await this.priceModel
+        .findOne({ productMaterial: 'gold' })
+        .sort({ createdAt: -1 }) // newest first
+        .exec();
+
+      return newest;
+    } catch (error) {
+      console.error('❌ Error fetching NEWEST gold from DB:', error);
+      return null;
+    }
   }
 
   private async sendGoldPrice(chatId: number | string) {
@@ -80,6 +137,32 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     await this.bot.sendMessage(chatId, '⏳ در حال دریافت قیمت نقره...');
     const prices = await this.silverService.getAllSilverPrices();
     await this.bot.sendMessage(chatId, prices);
+  }
+
+  private repairPrices(
+    newest: Record<string, number>,
+    newestDB?: Record<string, number>,
+    previousDB?: Record<string, number>,
+  ): Record<string, number> {
+    const final: Record<string, number> = { ...newest };
+
+    const fallbackSource = newestDB ?? previousDB ?? {};
+
+    for (const key of Object.keys(final)) {
+      const v = final[key];
+
+      const isBad = v === undefined || v === null || v === 0 || Number.isNaN(v);
+
+      if (
+        isBad &&
+        typeof fallbackSource[key] === 'number' &&
+        fallbackSource[key] > 0
+      ) {
+        final[key] = fallbackSource[key];
+      }
+    }
+
+    return final;
   }
 
   private initAutoPriceSender() {
@@ -143,203 +226,209 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     out = out.replace(/٬|،|\u00A0/g, ',');
     return out;
   }
-
-  /**
-   * Parse a human-readable multi-line price string returned by services
-   * into structured sitePrices, weightPrices and dollarPrices.
-   */
-private parseSitePrices(text: string): {
-  prices: Record<string, number>;
-  weightPrices: {
-    site: string;
-    weights: { weight: string; price: number; available: boolean }[];
-  }[];
-  dollarPrices: { kitcoGold?: number; kitcoSilver?: number };
-} {
-  const prices: Record<string, number> = {};
-  const weightMap: Record<
-    string,
-    { weight: string; price: number; available: boolean }[]
-  > = {};
-
-  const dollarPrices: { kitcoGold?: number; kitcoSilver?: number } = {};
-
-  if (!text || typeof text !== "string") {
-    return { prices, weightPrices: [], dollarPrices };
-  }
-
-  const lines = text
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter(Boolean);
-
-  let currentSiteForWeights: string | null = null;
-  let lastWeightSite: string | null = null;
-
-  for (const raw of lines) {
-    const line = this.toEnglishDigits(raw);
-
-    /** -----------------------------
-     *  KITCO (USD) PRICE LINES
-     * ----------------------------- */
-    const kitcoGoldMatch = line.match(
-      /kitco[^:\$\d]*\$?\s*[:：]?\s*([0-9\.,]+)/i
-    );
-    if (kitcoGoldMatch) {
-      const rawVal = kitcoGoldMatch[1].replace(/,/g, "");
-      const val = parseFloat(rawVal);
-
-      if (/silver/i.test(line)) {
-        dollarPrices.kitcoSilver = Number.isNaN(val) ? 0 : val;
-      } else {
-        dollarPrices.kitcoGold = Number.isNaN(val) ? 0 : val;
-      }
-      continue;
-    }
-
-    /** -----------------------------
-     *  ERROR LINES
-     * ----------------------------- */
-    if (/خطا در دریافت|error/i.test(line)) {
-      if (currentSiteForWeights && lastWeightSite) {
-        if (!weightMap[lastWeightSite]) weightMap[lastWeightSite] = [];
-      } else if (currentSiteForWeights) {
-        prices[currentSiteForWeights] = 0;
-      }
-      continue;
-    }
-
-    /** -----------------------------
-     *  WEIGHT SITE HEADER
-     * ----------------------------- */
-    const siteHeaderMatch = line.match(
-      /^[🔸⚪️🟡]?\s*([a-zA-Z0-9_.\-]+)(?:\s+silver\s+bars|\s+silver\s+bar)?\s*[:：]?$/i
-    );
-    if (siteHeaderMatch) {
-      const siteName = siteHeaderMatch[1]
-        .replace(/\./g, "_")
-        .replace(/\s+/g, "_")
-        .toLowerCase();
-
-      currentSiteForWeights = siteName;
-      lastWeightSite = siteName;
-
-      if (!weightMap[siteName]) weightMap[siteName] = [];
-
-      continue;
-    }
-
-    /** -----------------------------
-     *  WEIGHT LINES
-     * ----------------------------- */
-    const weightLineMatch = line.match(
-      /^([0-9]+\s*(g|gram|grams|oz|ounce|ounces))\s*[:：]?\s*([0-9,\.]+)\b/i
-    );
-
-    if (weightLineMatch && currentSiteForWeights) {
-      const weightLabel = weightLineMatch[1];
-      const num = parseFloat(weightLineMatch[3].replace(/,/g, ""));
-
-      weightMap[currentSiteForWeights].push({
-        weight: weightLabel,
-        price: Number.isNaN(num) ? 0 : num,
-        available: !Number.isNaN(num),
-      });
-
-      continue;
-    }
-
-    /** -----------------------------------------------------
-     *  FIXED GENERAL PRICE LINE (YOUR REQUESTED CODE HERE)
-     * ----------------------------------------------------- */
-    const fixedSiteMatch = line.match(
-      /^([a-zA-Z0-9_.\-]+)(?:\s*\([^)]*\))?(?:\s+silver\s+bar|\s+silver\s+bars)?\s*[:：–—\-]?\s*([0-9,\.]+)\b/i
-    );
-
-    if (fixedSiteMatch) {
-      let siteRaw = fixedSiteMatch[1]
-        .replace(/\./g, "_")
-        .replace(/\s+/g, "_")
-        .toLowerCase();
-
-      const num = parseFloat(fixedSiteMatch[2].replace(/,/g, ""));
-
-      prices[siteRaw] = Number.isNaN(num) ? 0 : num;
-
-      currentSiteForWeights = null;
-      continue;
+  
+  private safeParsePrices(text: string) {
+    try {
+      const parsed = this.parseSitePrices(String(text));
+      return {
+        prices: parsed?.prices || {},
+        dollarPrices: parsed?.dollarPrices || {},
+        weightPrices: parsed?.weightPrices || [],
+      };
+    } catch (err) {
+      console.error('❌ Parsing error:', err.message);
+      return {
+        prices: {},
+        dollarPrices: {},
+        weightPrices: [],
+      };
     }
   }
+  //  * Parse a human-readable multi-line price string returned by services
+  // into structured sitePrices, weightPrices and dollarPrices.
+  private parseSitePrices(text: string): {
+    prices: Record<string, number>;
+    weightPrices: {
+      site: string;
+      weights: { weight: string; price: number; available: boolean }[];
+    }[];
+    dollarPrices: { kitcoGold?: number; kitcoSilver?: number };
+  } {
+    const prices: Record<string, number> = {};
+    const weightMap: Record<
+      string,
+      { weight: string; price: number; available: boolean }[]
+    > = {};
 
-  /** -----------------------------
-   *  FINAL STRUCTURED OUTPUT
-   * ----------------------------- */
-  const weightPrices = Object.keys(weightMap).map((site) => ({
-    site,
-    weights: weightMap[site],
-  }));
+    const dollarPrices: { kitcoGold?: number; kitcoSilver?: number } = {};
 
-  return { prices, weightPrices, dollarPrices };
-}
+    if (!text || typeof text !== 'string') {
+      return { prices, weightPrices: [], dollarPrices };
+    }
 
+    const lines = text
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+
+    let currentSiteForWeights: string | null = null;
+    let lastWeightSite: string | null = null;
+
+    for (const raw of lines) {
+      const line = this.toEnglishDigits(raw);
+
+      // KITCO (USD) PRICE LINES
+      const kitcoGoldMatch = line.match(
+        /kitco[^:\$\d]*\$?\s*[:：]?\s*([0-9\.,]+)/i,
+      );
+      if (kitcoGoldMatch) {
+        const rawVal = kitcoGoldMatch[1].replace(/,/g, '');
+        const val = parseFloat(rawVal);
+
+        if (/silver/i.test(line)) {
+          dollarPrices.kitcoSilver = Number.isNaN(val) ? 0 : val;
+        } else {
+          dollarPrices.kitcoGold = Number.isNaN(val) ? 0 : val;
+        }
+        continue;
+      }
+
+      // ERROR LINES
+      if (/خطا در دریافت|error/i.test(line)) {
+        if (currentSiteForWeights && lastWeightSite) {
+          if (!weightMap[lastWeightSite]) weightMap[lastWeightSite] = [];
+        } else if (currentSiteForWeights) {
+          prices[currentSiteForWeights] = 0;
+        }
+        continue;
+      }
+
+      //WEIGHT SITE HEADER
+      const siteHeaderMatch = line.match(
+        /^[🔸⚪️🟡]?\s*([a-zA-Z0-9_.\-]+)(?:\s+silver\s+bars|\s+silver\s+bar)?\s*[:：]?$/i,
+      );
+      if (siteHeaderMatch) {
+        const siteName = siteHeaderMatch[1]
+          .replace(/\./g, '_')
+          .replace(/\s+/g, '_')
+          .toLowerCase();
+
+        currentSiteForWeights = siteName;
+        lastWeightSite = siteName;
+
+        if (!weightMap[siteName]) weightMap[siteName] = [];
+
+        continue;
+      }
+
+      // WEIGHT LINES
+      const weightLineMatch = line.match(
+        /^([0-9]+\s*(g|gram|grams|oz|ounce|ounces))\s*[:：]?\s*([0-9,\.]+)\b/i,
+      );
+
+      if (weightLineMatch && currentSiteForWeights) {
+        const weightLabel = weightLineMatch[1];
+        const num = parseFloat(weightLineMatch[3].replace(/,/g, ''));
+
+        weightMap[currentSiteForWeights].push({
+          weight: weightLabel,
+          price: Number.isNaN(num) ? 0 : num,
+          available: !Number.isNaN(num),
+        });
+
+        continue;
+      }
+
+      // FIXED GENERAL PRICE LINE (YOUR REQUESTED CODE HERE)
+      const fixedSiteMatch = line.match(
+        /^([a-zA-Z0-9_.\-]+)(?:\s*\([^)]*\))?(?:\s+silver\s+bar|\s+silver\s+bars)?\s*[:：–—\-]?\s*([0-9,\.]+)\b/i,
+      );
+
+      if (fixedSiteMatch) {
+        let siteRaw = fixedSiteMatch[1]
+          .replace(/\./g, '_')
+          .replace(/\s+/g, '_')
+          .toLowerCase();
+
+        const num = parseFloat(fixedSiteMatch[2].replace(/,/g, ''));
+
+        prices[siteRaw] = Number.isNaN(num) ? 0 : num;
+
+        currentSiteForWeights = null;
+        continue;
+      }
+    }
+
+    //FINAL STRUCTURED OUTPUT
+    const weightPrices = Object.keys(weightMap).map((site) => ({
+      site,
+      weights: weightMap[site],
+    }));
+
+    return { prices, weightPrices, dollarPrices };
+  }
 
   private async sendCombinedPrices() {
     try {
       console.log('🔄 Fetching combined prices...');
 
-      const [goldPrice, silverPrice] = await Promise.all([
+      // Fetch gold + silver text
+      const [goldPriceText, silverPriceText] = await Promise.all([
         this.goldService.getAllGoldPrices(),
         this.silverService.getAllSilverPrices(),
       ]);
 
-      const message = `\n\n${goldPrice}\n\n${silverPrice}`;
-
+      // Send message to Telegram
+      const message = `\n\n${goldPriceText}\n\n${silverPriceText}`;
       await this.bot.sendMessage(this.groupChatId, message, {
         parse_mode: 'HTML',
       });
 
       console.log('✅ Prices sent successfully');
 
-      // Persist price snapshots to MongoDB (best-effort)
+      //
+      // ---------------------------
+      //  SAVE SNAPSHOTS INTO DB
+      // ---------------------------
+      //
       try {
-        // Parse structured data from the human-readable strings
-        const parsedGold = this.parseSitePrices(String(goldPrice));
-        const parsedSilver = this.parseSitePrices(String(silverPrice));
+        const goldParsed = this.safeParsePrices(goldPriceText);
+        const silverParsed = this.safeParsePrices(silverPriceText);
 
-        // Ensure dollar price defaults so missing kitco values are saved as 0
         const ensureDollarDefaults = (dp: any) => ({
-          kitcoGold: dp?.kitcoGold ?? 0,
-          kitcoSilver: dp?.kitcoSilver ?? 0,
+          kitcoGold: Number(dp?.kitcoGold) || 0,
+          kitcoSilver: Number(dp?.kitcoSilver) || 0,
         });
 
         const goldDoc = new this.priceModel({
           productMaterial: 'gold',
           productType: 'ball',
-          prices: parsedGold.prices,
-          // omit date fields per user request
-          dollarPrices: ensureDollarDefaults(parsedGold.dollarPrices),
+          prices: goldParsed.prices,
+          dollarPrices: ensureDollarDefaults(goldParsed.dollarPrices),
         });
 
         const silverDoc = new this.priceModel({
           productMaterial: 'silver',
-          productType: parsedSilver.weightPrices.length > 0 ? 'bar' : 'ball',
-          prices: parsedSilver.prices,
-          weightPrices: parsedSilver.weightPrices,
-          // if kitco silver missing, default to 0
-          dollarPrices: ensureDollarDefaults(parsedSilver.dollarPrices),
+          productType: silverParsed.weightPrices.length > 0 ? 'bar' : 'ball',
+          prices: silverParsed.prices,
+          weightPrices: silverParsed.weightPrices,
+          dollarPrices: ensureDollarDefaults(silverParsed.dollarPrices),
         });
 
-        await Promise.all([goldDoc.save(), silverDoc.save()]);
+        await goldDoc.save().catch((e) => {
+          console.error('❌ Failed to save gold snapshot:', e.message);
+        });
+
+        await silverDoc.save().catch((e) => {
+          console.error('❌ Failed to save silver snapshot:', e.message);
+        });
+
         console.log('💾 Price snapshots saved to MongoDB');
-      } catch (saveErr) {
-        
-        console.error(
-          'Failed to save price snapshots:',
-          saveErr && saveErr.message ? saveErr.message : saveErr,
-        );
+      } catch (inner) {
+        console.error('❌ Internal parse/save failure:', inner);
       }
     } catch (error) {
-      console.error('Error sending combined prices:', error.message);
+      console.error('❌ Error sending combined prices:', error);
     }
   }
 }
