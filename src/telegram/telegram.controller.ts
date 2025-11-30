@@ -78,7 +78,7 @@ export class TelegramController {
   @Get('gold')
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get last saved gold price (auto-repaired)' })
+  @ApiOperation({ summary: 'Get last saved gold price.' })
   async getLatestGoldPrice() {
     const latest = await this.priceModel
       .findOne({ productMaterial: 'gold' })
@@ -91,7 +91,7 @@ export class TelegramController {
   @Get('silver')
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get last saved silver price (auto-repaired)' })
+  @ApiOperation({ summary: 'Get last saved silver price.' })
   async getLatestSilverPrice() {  
     const latest = await this.priceModel
       .findOne({ productMaterial: 'silver' })
