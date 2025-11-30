@@ -7,8 +7,8 @@ async function bootstrap() {
 
 
   const config = new DocumentBuilder()
-    .setTitle('Library')
-    .setDescription('The library API description')
+    .setTitle('Soprano')
+    .setDescription('Soprano Bot API documentation')
     .setVersion('1.0')
     .addBearerAuth()
     .build();
