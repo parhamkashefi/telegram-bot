@@ -85,14 +85,14 @@ export class TelegramController {
       .sort({ createdAt: -1 });
 
     if (!latest) return null;
-    return (latest);
+    return latest;
   }
 
   @Get('silver')
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get last saved silver price.' })
-  async getLatestSilverPrice() {  
+  async getLatestSilverPrice() {
     const latest = await this.priceModel
       .findOne({ productMaterial: 'silver' })
       .sort({ createdAt: -1 });
@@ -101,6 +101,29 @@ export class TelegramController {
 
     // const valid = await this.findNonZeroRecord('silver');
     // return this.mergeWithPreviousNonZero(latest, valid);
-    return(latest);
+    return latest;
+  }
+
+  @Get('tomanPerDollar')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get the latest USD-to-Toman price saved in DB' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns the latest saved Toman per Dollar rate from DB.',
+    schema: {
+      example: {
+        tomanPerDollar: 116900,
+        fetchedAtUtc: '2025-11-29T13:22:10.123Z',
+      },
+    },
+  })
+  async getTomanPerDollarFromDB() {
+    const latest = await this.priceModel
+      .findOne({ tomanPerDollar: { $gt: 0 } }) 
+      .sort({ createdAt: -1 });
+
+    if (!latest) return null;
+    return latest ;
   }
 }
