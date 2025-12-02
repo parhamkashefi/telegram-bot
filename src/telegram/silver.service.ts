@@ -186,17 +186,21 @@ export class SilverService {
         /[^0-9]/g,
         '',
       );
+
       if (!cleanedPrice) {
         return 'noghra.com: ❌ قیمت یافت نشد';
       }
 
-      return `noghra.com: ${cleanedPrice}`;
+      // Convert to number and format with commas
+      const priceNumber = parseInt(cleanedPrice, 10);
+      const formattedPrice = priceNumber.toLocaleString('en-US');
+
+      return `noghra.com: ${formattedPrice}`;
     } catch (error) {
       console.error('❌ Error fetching Noghra price:', error);
       return 'noghra.com: خطا در دریافت قیمت';
     }
   }
-
   // 🔸 Site 4 - tokeniko.com
   async getPriceFromTokeniko(): Promise<string> {
     try {
@@ -231,84 +235,72 @@ export class SilverService {
   }
 
   // 🔸 Site 5 - silverin.ir
+  private async safeClosePage(page: Page | null): Promise<void> {
+    if (page) {
+      try {
+        await page.close();
+      } catch (err) {
+        console.error('Error closing page:', err);
+      }
+    }
+  }
+
   async getPriceFromSilverin(): Promise<string> {
     let browser: Browser | null = null;
+    let page: Page | null = null;
+
     try {
       browser = await puppeteer.launch(this.browserConfig);
-      const page = await browser.newPage();
+      page = await browser.newPage();
+
       await page.setUserAgent(
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       );
 
-      await page.goto('https://silverin.ir/', {
+      await page.goto('https://silverin.ir/product/ساچمه-نقره-10-گرمی-999/', {
         waitUntil: 'domcontentloaded',
         timeout: 30000,
       });
 
-      const selectors = [
-        'section:nth-of-type(7) div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > div > div:nth-of-type(6) bdi',
-        '.price',
-        '[class*="price"]',
-        'bdi',
-        'span[class*="price"]',
-        'div[class*="price"]',
-      ];
+      const xpath =
+        '/html/body/div[1]/div/main/div/div/div/section[2]/div/div[2]/div/section[2]/div/div/div/div[3]/div/p/ins/span/bdi';
 
-      let priceText = '';
-      for (const selector of selectors) {
-        try {
-          await page.waitForSelector(selector, { timeout: 5000 });
-          priceText = await page.$eval(selector, (el) =>
-            (el.textContent || '').trim(),
-          );
-          if (priceText && priceText.length > 0) {
-            break;
-          }
-        } catch (e) {
-          continue;
-        }
-      }
-
-      if (!priceText) {
-        const pageContent = await page.content();
-        const $ = cheerio.load(pageContent);
-        const priceElements = $('body').find('*:contains("تومان")');
-        for (let i = 0; i < priceElements.length; i++) {
-          const text = $(priceElements[i]).text().trim();
-          if (text.match(/[\d,]+/)) {
-            priceText = text;
-            break;
-          }
-        }
-      }
+      // Wait for element and get price in one operation
+      const priceText = await page.evaluate((xpath) => {
+        const result = document.evaluate(
+          xpath,
+          document,
+          null,
+          XPathResult.FIRST_ORDERED_NODE_TYPE,
+          null,
+        );
+        const element = result.singleNodeValue as HTMLElement;
+        return element?.textContent?.trim() || '';
+      }, xpath);
 
       if (!priceText) {
         return 'silverin.ir: ❌ قیمت یافت نشد';
       }
 
-      const cleanedPrice = this.persianToEnglish(priceText).replace(
-        /[^\d]/g,
-        '',
-      );
+      const cleaned = this.persianToEnglish(priceText).replace(/[^\d]/g, '');
 
-      if (!cleanedPrice) {
+      if (!cleaned) {
         return 'silverin.ir: ❌ قیمت نامعتبر';
       }
 
-      const price = parseInt(cleanedPrice, 10);
+      const price = parseInt(cleaned, 10);
 
       if (isNaN(price)) {
         return 'silverin.ir: ❌ قیمت نامعتبر';
       }
 
-      const dividedPrice = Math.floor(
-        price / (price > 100000 ? 10 : 1),
-      ).toLocaleString();
-      return `silverin.ir: ${dividedPrice}`;
+      const pricePerGram = Math.floor(price / 10);
+      return `silverin.ir: ${pricePerGram.toLocaleString()}`;
     } catch (err) {
-      console.error('❌ Error fetching Silverin price:', err);
+      console.error('❌ Error fetching Silverin:', err);
       return 'silverin.ir: خطا در دریافت قیمت';
     } finally {
+      await this.safeClosePage(page);
       await this.safeCloseBrowser(browser);
     }
   }
@@ -415,36 +407,35 @@ export class SilverService {
 
   // 🔸 Site 8 - kitco.com
   async getPriceFromKitco(): Promise<string> {
-    let browser: Browser | null = null;
     try {
-      browser = await puppeteer.launch({ headless: true });
-      const page = await browser.newPage();
+      const url = 'https://www.kitco.com/api/kitco-xml/precious-metals';
 
-      await page.goto('https://www.kitco.com/charts/livesilver.html', {
-        waitUntil: 'networkidle2',
-        timeout: 30000,
+      const response = await axios.get(url, {
+        timeout: 20000,
+        headers: {
+          Accept: 'application/json',
+        },
       });
 
-      // Fixed: Use setTimeout instead of waitForTimeout
-      await new Promise((resolve) => setTimeout(resolve, 5000));
-
-      const pageText = await page.evaluate(() => document.body.textContent);
-      const pricePattern = /\$\d+\.\d+/;
-
-      // Fixed: Add null check for pageText
-      const priceMatch = pageText?.match(pricePattern);
-
-      if (priceMatch) {
-        const price = priceMatch[0].replace('$', '');
-        return `kitco.com $ : ${price}`;
+      if (!response.data || !response.data.data) {
+        throw new Error('Invalid response from Kitco');
       }
 
-      throw new Error('Silver price not found');
-    } catch (err) {
-      console.error('Error:', err);
+      const metals = response.data.data;
+
+      // Find the object where commodity === "Silver"
+      const silver = metals.find((m: any) => m.commodity === 'Silver');
+
+      if (!silver || !silver.lastBid || !silver.lastBid.bidVal) {
+        throw new Error('Silver price not found in API');
+      }
+
+      const price = silver.lastBid.bidVal; // example: 56.33
+
+      return `kitco.com $ : ${price}`;
+    } catch (error) {
+      console.error('❌ Error fetching Kitco silver price:', error);
       return 'kitco.com : خطا در دریافت';
-    } finally {
-      await this.safeCloseBrowser(browser);
     }
   }
 
@@ -688,7 +679,7 @@ export class SilverService {
       () => this.getSilverBarPriceFromTokeniko(),
       () => this.getSilverBarPriceFromParsis(),
       () => this.getZiotoSilverBars(),
-      // () => this.getPriceFromKitco(),
+      () => this.getPriceFromKitco(),
     ];
 
     const pricePromises = priceMethods.map(async (method) => {
