@@ -34,6 +34,10 @@ export class Product {
 
   @ApiProperty()
   @Prop({ type: Number, required: true })
+  karat: number;
+
+  @ApiProperty()
+  @Prop({ type: Number, required: true })
   weight: number;
 
   @ApiProperty()
