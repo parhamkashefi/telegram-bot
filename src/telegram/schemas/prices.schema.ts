@@ -6,13 +6,13 @@ export type PriceDocument = Price & Document;
 @Schema({ timestamps: true })
 export class Price {
   @Prop({ required: true })
-  productMaterial: string; // gold | silver
+  productMaterial: string;
 
   @Prop({ required: true })
-  productType: string; // ball | bar
+  productType: string;
 
   @Prop({ type: Object, default: {} })
-  prices?: Record<string, number>; // for simple gold/silver prices
+  prices?: Record<string, number>;
 
   @Prop({
     type: [
@@ -37,6 +37,9 @@ export class Price {
   @Prop({ type: Object, default: {} })
   dollarPrices?: Record<string, number>;
 
+  @Prop({ type: Number, default: 0 })
+  tomanPerDollar?: number;
+
   @Prop({ type: String })
   fetchedAtIran?: string;
 
@@ -44,4 +47,4 @@ export class Price {
   fetchedAtUtc?: Date;
 }
 
-export const PriceSchema = SchemaFactory.createForClass(Price); 
+export const PriceSchema = SchemaFactory.createForClass(Price);
