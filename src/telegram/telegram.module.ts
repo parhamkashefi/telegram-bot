@@ -7,6 +7,7 @@ import { GoldService } from './gold.service';
 import { SilverService } from './silver.service';
 import { Price, PriceSchema } from './schemas/prices.schema';
 import { AuthModule } from '../auth/auth.module';
+import { UsdToIrrService } from './usdToIrr.service';
 
 @Module({
   imports: [
@@ -17,7 +18,7 @@ import { AuthModule } from '../auth/auth.module';
     ]),
   ],
   controllers: [TelegramController],
-  providers: [TelegramService, GoldService, SilverService],
+  providers: [TelegramService, GoldService, SilverService,UsdToIrrService],
   exports: [TelegramService],
 })
 export class TelegramModule {}
