@@ -6,6 +6,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Price, PriceDocument } from './schemas/prices.schema';
 import TelegramBot from 'node-telegram-bot-api';
+import { UsdToIrrService } from './usdToIrr.service';
 
 @Injectable()
 export class TelegramService implements OnModuleInit, OnModuleDestroy {
@@ -17,6 +18,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     private readonly configService: ConfigService,
     private readonly goldService: GoldService,
     private readonly silverService: SilverService,
+    private readonly usdToIrrService: UsdToIrrService,
     @InjectModel(Price.name) private readonly priceModel: Model<PriceDocument>,
   ) {}
 
@@ -226,7 +228,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     out = out.replace(/٬|،|\u00A0/g, ',');
     return out;
   }
-  
+
   private safeParsePrices(text: string) {
     try {
       const parsed = this.parseSitePrices(String(text));
@@ -372,34 +374,42 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     try {
       console.log('🔄 Fetching combined prices...');
 
-      // Fetch gold + silver text
-      const [goldPriceText, silverPriceText] = await Promise.all([
+      // 1️⃣ Fetch Gold + Silver + Dollar
+      const [goldPriceText, silverPriceText, dollarValue] = await Promise.all([
         this.goldService.getAllGoldPrices(),
         this.silverService.getAllSilverPrices(),
+        this.usdToIrrService.getTomanPerDollar(), // returns number like 117550
       ]);
 
-      // Send message to Telegram
+      // Format dollar value for display (or skip if you don't want to show it)
+      const dollarDisplayText = `💰 قیمت دلار: ${dollarValue?.toLocaleString() || 'نامعلوم'} تومان`;
+
+      // Send TEXT message to Telegram (WITHOUT dollar price if you don't want it)
       const message = `\n\n${goldPriceText}\n\n${silverPriceText}`;
+      // If you want to include dollar price, use this instead:
+      // const message = `\n\n${goldPriceText}\n\n${silverPriceText}\n\n${dollarDisplayText}`;
+
       await this.bot.sendMessage(this.groupChatId, message, {
         parse_mode: 'HTML',
       });
 
       console.log('✅ Prices sent successfully');
 
-      //
-      // ---------------------------
-      //  SAVE SNAPSHOTS INTO DB
-      // ---------------------------
-      //
+      // SAVE all THREE documents into DB
       try {
+        // PARSE GOLD & SILVER blocks into structured objects
         const goldParsed = this.safeParsePrices(goldPriceText);
         const silverParsed = this.safeParsePrices(silverPriceText);
+
+        // Use the dollarValue directly (it's already a number)
+        const dollarValueToSave = dollarValue || 0;
 
         const ensureDollarDefaults = (dp: any) => ({
           kitcoGold: Number(dp?.kitcoGold) || 0,
           kitcoSilver: Number(dp?.kitcoSilver) || 0,
         });
 
+        // GOLD DOC
         const goldDoc = new this.priceModel({
           productMaterial: 'gold',
           productType: 'ball',
@@ -407,6 +417,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
           dollarPrices: ensureDollarDefaults(goldParsed.dollarPrices),
         });
 
+        // SILVER DOC
         const silverDoc = new this.priceModel({
           productMaterial: 'silver',
           productType: silverParsed.weightPrices.length > 0 ? 'bar' : 'ball',
@@ -415,17 +426,38 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
           dollarPrices: ensureDollarDefaults(silverParsed.dollarPrices),
         });
 
-        await goldDoc.save().catch((e) => {
-          console.error('❌ Failed to save gold snapshot:', e.message);
+        // DOLLAR DOC
+        const dollarDoc = new this.priceModel({
+          productMaterial: 'dollar',
+          productType: 'usd',
+          prices: {},
+          weightPrices: [],
+          dollarPrices: {},
+          tomanPerDollar: dollarValueToSave,
         });
 
-        await silverDoc.save().catch((e) => {
-          console.error('❌ Failed to save silver snapshot:', e.message);
-        });
+        // SAVE THEM
+        await Promise.allSettled([
+          goldDoc
+            .save()
+            .catch((e) =>
+              console.error('❌ Failed to save gold snapshot:', e.message),
+            ),
+          silverDoc
+            .save()
+            .catch((e) =>
+              console.error('❌ Failed to save silver snapshot:', e.message),
+            ),
+          dollarDoc
+            .save()
+            .catch((e) =>
+              console.error('❌ Failed to save dollar snapshot:', e.message),
+            ),
+        ]);
 
-        console.log('💾 Price snapshots saved to MongoDB');
-      } catch (inner) {
-        console.error('❌ Internal parse/save failure:', inner);
+        console.log('💾 All snapshots saved to MongoDB');
+      } catch (innerError) {
+        console.error('❌ Internal parse/save failure:', innerError);
       }
     } catch (error) {
       console.error('❌ Error sending combined prices:', error);
