@@ -13,6 +13,10 @@ export class CreateProductDto {
 
   @ApiProperty()
   @IsNumber()
+  karat: number;
+
+  @ApiProperty()
+  @IsNumber()
   weight: number;
 
   @ApiProperty()
