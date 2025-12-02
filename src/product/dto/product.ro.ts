@@ -16,6 +16,10 @@ export class ProductRo {
 
   @ApiProperty()
   @Expose()
+  karat: number;
+
+  @ApiProperty()
+  @Expose()
   weight: number;
 
   @ApiProperty()
