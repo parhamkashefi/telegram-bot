@@ -7,6 +7,8 @@ import { Model } from 'mongoose';
 import { Price, PriceDocument } from './schemas/prices.schema';
 import TelegramBot from 'node-telegram-bot-api';
 import { UsdToIrrService } from './usdToIrr.service';
+import { PriceRo } from './dto/price.ro';
+import { plainToInstance } from 'class-transformer';
 
 @Injectable()
 export class TelegramService implements OnModuleInit, OnModuleDestroy {
@@ -85,16 +87,21 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async getNewestSilverFromDB(): Promise<PriceDocument | null> {
+  async getNewestSilverFromDB(): Promise<PriceRo | null> {
     try {
       const newest = await this.priceModel
         .findOne({ productMaterial: 'silver' })
-        .sort({ createdAt: -1 }) // newest first
+        .sort({ createdAt: -1 })
+        .lean()
         .exec();
 
-      return newest;
+      if (!newest) return null;
+
+      return plainToInstance(PriceRo, newest, {
+        excludeExtraneousValues: true,
+      });
     } catch (error) {
-      console.error('❌ Error fetching NEWEST gold from DB:', error);
+      console.error('❌ Error getting newest silver from DB:', error);
       return null;
     }
   }
@@ -115,16 +122,21 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async getNewestGoldFromDB(): Promise<PriceDocument | null> {
+  async getNewestGoldFromDB(): Promise<PriceRo | null> {
     try {
       const newest = await this.priceModel
         .findOne({ productMaterial: 'gold' })
-        .sort({ createdAt: -1 }) // newest first
+        .sort({ createdAt: -1 })
+        .lean()
         .exec();
 
-      return newest;
+      if (!newest) return null;
+
+      return plainToInstance(PriceRo, newest, {
+        excludeExtraneousValues: true,
+      });
     } catch (error) {
-      console.error('❌ Error fetching NEWEST gold from DB:', error);
+      console.error('❌ Error getting newest silver from DB:', error);
       return null;
     }
   }
@@ -141,31 +153,31 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     await this.bot.sendMessage(chatId, prices);
   }
 
-  private repairPrices(
-    newest: Record<string, number>,
-    newestDB?: Record<string, number>,
-    previousDB?: Record<string, number>,
-  ): Record<string, number> {
-    const final: Record<string, number> = { ...newest };
+  // private repairPrices(
+  //   newest: Record<string, number>,
+  //   newestDB?: Record<string, number>,
+  //   previousDB?: Record<string, number>,
+  // ): Record<string, number> {
+  //   const final: Record<string, number> = { ...newest };
 
-    const fallbackSource = newestDB ?? previousDB ?? {};
+  //   const fallbackSource = newestDB ?? previousDB ?? {};
 
-    for (const key of Object.keys(final)) {
-      const v = final[key];
+  //   for (const key of Object.keys(final)) {
+  //     const v = final[key];
 
-      const isBad = v === undefined || v === null || v === 0 || Number.isNaN(v);
+  //     const isBad = v === undefined || v === null || v === 0 || Number.isNaN(v);
 
-      if (
-        isBad &&
-        typeof fallbackSource[key] === 'number' &&
-        fallbackSource[key] > 0
-      ) {
-        final[key] = fallbackSource[key];
-      }
-    }
+  //     if (
+  //       isBad &&
+  //       typeof fallbackSource[key] === 'number' &&
+  //       fallbackSource[key] > 0
+  //     ) {
+  //       final[key] = fallbackSource[key];
+  //     }
+  //   }
 
-    return final;
-  }
+  //   return final;
+  // }
 
   private initAutoPriceSender() {
     if (!this.groupChatId) {
@@ -189,31 +201,31 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     ); // 30 minutes
   }
 
-  private parsePrice(price: any): number | null {
-    if (price == null) return null;
-    if (typeof price === 'number') return price;
-    if (typeof price === 'object') {
-      // try to pick a numeric value from object fields
-      const vals = Object.values(price).flat
-        ? Object.values(price).flat()
-        : Object.values(price);
-      for (const v of vals) {
-        const n = this.parsePrice(v);
-        if (n != null) return n;
-      }
-      return null;
-    }
-    let s = String(price);
-    // replace Persian digits with Latin digits
-    const persian = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
-    for (let i = 0; i < 10; i++)
-      s = s.replace(new RegExp(persian[i], 'g'), String(i));
-    const matches = s.match(/[\d,\.]+/g);
-    if (!matches) return null;
-    const last = matches[matches.length - 1].replace(/,/g, '');
-    const num = parseFloat(last);
-    return Number.isNaN(num) ? null : num;
-  }
+  // private parsePrice(price: any): number | null {
+  //   if (price == null) return null;
+  //   if (typeof price === 'number') return price;
+  //   if (typeof price === 'object') {
+  //     // try to pick a numeric value from object fields
+  //     const vals = Object.values(price).flat
+  //       ? Object.values(price).flat()
+  //       : Object.values(price);
+  //     for (const v of vals) {
+  //       const n = this.parsePrice(v);
+  //       if (n != null) return n;
+  //     }
+  //     return null;
+  //   }
+  //   let s = String(price);
+  //   // replace Persian digits with Latin digits
+  //   const persian = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+  //   for (let i = 0; i < 10; i++)
+  //     s = s.replace(new RegExp(persian[i], 'g'), String(i));
+  //   const matches = s.match(/[\d,\.]+/g);
+  //   if (!matches) return null;
+  //   const last = matches[matches.length - 1].replace(/,/g, '');
+  //   const num = parseFloat(last);
+  //   return Number.isNaN(num) ? null : num;
+  // }
 
   private toEnglishDigits(s: string): string {
     if (!s) return s;
@@ -386,8 +398,6 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
 
       // Send TEXT message to Telegram (WITHOUT dollar price if you don't want it)
       const message = `\n\n${goldPriceText}\n\n${silverPriceText}`;
-      // If you want to include dollar price, use this instead:
-      // const message = `\n\n${goldPriceText}\n\n${silverPriceText}\n\n${dollarDisplayText}`;
 
       await this.bot.sendMessage(this.groupChatId, message, {
         parse_mode: 'HTML',
