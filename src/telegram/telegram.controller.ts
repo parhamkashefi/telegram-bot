@@ -31,50 +31,6 @@ export class TelegramController {
     return this.authService.login(dto.username);
   }
 
-  // // MERGE FUNCTION
-  // private mergeWithPreviousNonZero(
-  //   latest: PriceDocument,
-  //   source: PriceDocument | null,
-  // ) {
-  //   if (!latest || !source) return latest;
-
-  //   const latestObj = latest.toObject();
-  //   const sourceObj = source.toObject();
-  //   const latestPrices = latestObj.prices || {};
-  //   const sourcePrices = sourceObj.prices || {};
-
-  //   const mergedPrices: Record<string, number> = { ...latestPrices };
-
-  //   for (const key of Object.keys(mergedPrices)) {
-  //     const latestVal = mergedPrices[key];
-  //     const sourceVal = sourcePrices[key];
-
-  //     if (latestVal === 0 && typeof sourceVal === 'number' && sourceVal > 0) {
-  //       mergedPrices[key] = sourceVal;
-  //     }
-  //   }
-
-  //   return { ...latestObj, prices: mergedPrices };
-  // }
-
-  // private async findNonZeroRecord(
-  //   material: string,
-  // ): Promise<PriceDocument | null> {
-  //   const records = await this.priceModel
-  //     .find({ productMaterial: material })
-  //     .sort({ createdAt: -1 })
-  //     .limit(10);
-
-  //   for (const rec of records) {
-  //     if (!rec || !rec.prices) continue;
-
-  //     const hasNonZero = Object.values(rec.prices).some((v: any) => v > 0);
-  //     if (hasNonZero) return rec;
-  //   }
-
-  //   return null;
-  // }
-
   @Get('gold')
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()
