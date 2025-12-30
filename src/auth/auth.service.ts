@@ -1,6 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { LoginDto } from './dto/login.dto';
+import { LoginRO } from './dto/login.ro';
 
 @Injectable()
 export class AuthService {
@@ -9,7 +11,21 @@ export class AuthService {
     private readonly configService: ConfigService,
   ) {}
 
-  validateAdmin(username: string, password: string): boolean {
+  async login(dto: LoginDto): Promise<LoginRO> {
+    // Validate admin credentials
+    const isValid = this.validateAdmin(dto.username, dto.password);
+
+    if (!isValid) {
+      throw new UnauthorizedException('Invalid username or password');
+    }
+
+    // Generate JWT token
+    const access_token = this.generateToken(dto.username);
+
+    return { access_token };
+  }
+
+  private validateAdmin(username: string, password: string): boolean {
     const adminUsername = this.configService.get<string>('ADMIN_USERNAME');
     const adminPassword = this.configService.get<string>('ADMIN_PASSWORD');
     
@@ -19,11 +35,8 @@ export class AuthService {
     );
   }
 
-  login(username: string) {
+  private generateToken(username: string): string {
     const payload = { username };
-
-    return {
-      access_token: this.jwtService.sign(payload),
-    };
+    return this.jwtService.sign(payload);
   }
 }

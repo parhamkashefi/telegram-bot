@@ -1,24 +1,18 @@
-import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
-import { MongooseModule } from '@nestjs/mongoose';
+import { Module, forwardRef } from '@nestjs/common';
 import { TelegramController } from './telegram.controller';
 import { TelegramService } from './telegram.service';
-import { GoldService } from './gold.service';
-import { SilverService } from './silver.service';
-import { Price, PriceSchema } from './schemas/prices.schema';
-import { AuthModule } from '../auth/auth.module';
-import { UsdToIrrService } from './usdToIrr.service';
+import { GoldModule } from '../gold/gold.module';
+import { SilverModule } from '../silver/silver.module';
+import { UsdToIrrModule } from '../usdToIrr/usdToIrr.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot(),
-    AuthModule,
-    MongooseModule.forFeature([
-      { name: Price.name, schema: PriceSchema },
-    ]),
+    forwardRef(() => GoldModule),
+    forwardRef(() => SilverModule),
+    forwardRef(() => UsdToIrrModule),
   ],
   controllers: [TelegramController],
-  providers: [TelegramService, GoldService, SilverService,UsdToIrrService],
+  providers: [TelegramService],
   exports: [TelegramService],
 })
 export class TelegramModule {}

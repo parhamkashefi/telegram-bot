@@ -35,6 +35,7 @@
     "class-validator": "^0.14.2",
     "input": "^1.0.1",
     "jalaali-js": "^1.2.8",
+    "moment-jalaali": "^0.10.4",
     "moment-timezone": "^0.6.0",
     "mongoose": "^8.19.1",
     "node-telegram-bot-api": "^0.66.0",
