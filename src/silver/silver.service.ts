@@ -1,12 +1,9 @@
-import { forwardRef, Inject, Injectable, OnModuleInit } from '@nestjs/common';
-import TelegramBot from 'node-telegram-bot-api';
-import { ConfigService } from '@nestjs/config';
+import { Injectable } from '@nestjs/common';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import puppeteer, { Browser, Page } from 'puppeteer';
 import moment from 'moment-timezone';
 import * as jalaali from 'jalaali-js';
-import { TelegramService } from '../telegram/telegram.service';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { SilverRo } from './dto/silver.ro';
@@ -36,7 +33,6 @@ export class SilverService {
 
   constructor(
     private readonly usdToIrrService: UsdToIrrService,
-    @Inject(forwardRef(() => TelegramService))
     @InjectModel(Silver.name)
     private readonly silverModel: Model<SilverDocument>,
   ) {}
@@ -262,14 +258,25 @@ export class SilverService {
 
       const $ = cheerio.load(data);
 
-      const text = $('table tbody tr:nth-child(1) td p span strong span')
+      const text = $('table tbody tr:nth-child(1) td p span strong spans')
         .eq(1)
         .text()
         .trim();
 
+      if (text === '') {
+        try {
+          throw new Error('noghra price element empty');
+        } catch (error) {
+          console.error('Internal error:', error);
+        }
+      }
+
       const cleaned = this.toEnglishDigits(text).replace(/[^\d]/g, '');
       const price = cleaned ? Number(cleaned) : null;
-
+      console.log('silver noghra', {
+        site: 'noghra',
+        price: [price && !isNaN(price) ? price : 0],
+      });
       return {
         site: 'noghra',
         price: [price && !isNaN(price) ? price : 0],
@@ -302,11 +309,27 @@ export class SilverService {
         .text()
         .trim();
 
+      if (text === '') {
+        try {
+          throw new Error('Tokeniko price element empty');
+        } catch (error) {
+          console.error('Internal error:', error);
+        }
+
+        return {
+          site: 'tokeniko',
+          price: [0],
+        };
+      }
+
       const cleaned = this.toEnglishDigits(text).replace(/[^\d]/g, '');
       const totalPrice = Number(cleaned);
 
       const perGram = Math.floor(totalPrice / 31.1035);
-
+      console.log('silver tokeniko', {
+        site: 'tokeniko',
+        price: [!isNaN(perGram) ? perGram : 0],
+      });
       return {
         site: 'tokeniko',
         price: [!isNaN(perGram) ? perGram : 0],
@@ -341,7 +364,7 @@ export class SilverService {
           const el = document.querySelector('p.price bdi');
           return el && el.textContent && el.textContent.trim().length > 0;
         },
-        { timeout: 15000 },
+        { timeout: 10000 },
       );
 
       const text = await page.evaluate(() => {
@@ -349,12 +372,28 @@ export class SilverService {
         return el?.textContent?.trim() || '';
       });
 
+      if (text === '') {
+        try {
+          throw new Error('silverin price element empty');
+        } catch (error) {
+          console.error('Internal error:', error);
+        }
+
+        return {
+          site: 'tokeniko',
+          price: [0],
+        };
+      }
+
       const cleaned = this.persianToEnglish(text).replace(/[^\d]/g, '');
       if (!cleaned) return { site: 'silverin', price: [0] };
 
       const totalPrice = Number(cleaned); // price for 10g
       const perGram = Math.floor(totalPrice / 10);
-
+      console.log('silver silverin : ', {
+        site: 'silverin',
+        price: [perGram],
+      });
       return {
         site: 'silverin',
         price: [perGram],
@@ -411,10 +450,26 @@ export class SilverService {
         return result.singleNodeValue?.textContent?.trim() || '';
       });
 
-      const price = Number(text.replace(/,/g, ''));
+      if (text === '') {
+        try {
+          throw new Error('silverin price element empty');
+        } catch (error) {
+          console.error('Internal error:', error);
+        }
 
-      return {
+        return {
+          site: 'tokeniko',
+          price: [0],
+        };
+      }
+
+      const price = Number(text.replace(/,/g, ''));
+      console.log('silver noghresea : ', {
         site: 'noghresea',
+        price: Number.isFinite(price) ? [price] : [0],
+      });
+      return {
+        site: 'silver noghresea',
         price: Number.isFinite(price) ? [price] : [0],
       };
     } catch (error) {
@@ -455,6 +510,10 @@ export class SilverService {
       if (isNaN(price)) {
         throw new Error('Invalid price value from API');
       }
+      console.log('silver kitco : ', {
+        site: 'kitco.com',
+        price: [price],
+      });
 
       return {
         site: 'kitco.com',
@@ -472,11 +531,7 @@ export class SilverService {
   //bars
 
   // 🔸 Site 1 - tokeniko.com silver bars
-  async getTokenikoSilverBars(): Promise<{
-    site: string;
-    weight: [number];
-    price: [number];
-  }> {
+  async getTokenikoSilverBars(): Promise<{site: string;weight: [number];price: [number];}> {
     let browser: Browser | null = null;
 
     try {
@@ -569,11 +624,7 @@ export class SilverService {
   }
 
   // 🔸 Site 2 - parsisgold.com silver bars
-  async getParsisSilverBars(): Promise<{
-    site: string;
-    weight: [number];
-    price: [number];
-  }> {
+  async getParsisSilverBars(): Promise<{site: string;weight: [number];price: [number];}> {
     let browser: Browser | null = null;
 
     try {
@@ -640,11 +691,7 @@ export class SilverService {
   }
 
   // 🔸 Site 3 - zioto.gold silver bars
-  async getZiotoSilverBars(): Promise<{
-    site: string;
-    weight: [number];
-    price: [number];
-  }> {
+  async getZiotoSilverBars(): Promise<{site: string;weight: [number];price: [number];}> {
     let browser: Browser | null = null;
 
     try {
@@ -767,6 +814,7 @@ export class SilverService {
   }
 
   async createSilver(silverDto: SilverDto): Promise<SilverRo> {
+    console.log(silverDto);
     const silver = await this.silverModel.create(silverDto);
 
     console.log('silver saved in db');
@@ -890,4 +938,5 @@ export class SilverService {
     const silver = await this.createSilver(silverDto);
     return silver;
   }
+
 }

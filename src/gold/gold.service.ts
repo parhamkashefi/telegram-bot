@@ -83,7 +83,7 @@ export class GoldService {
   async getPriceFromEstjt(): Promise<{ site: string; prices: [number] }> {
     try {
       const { data } = await axios.get('https://www.estjt.ir/price/', {
-        timeout: 30000,
+        timeout: 20000,
       });
 
       const $ = cheerio.load(data);
@@ -107,7 +107,8 @@ export class GoldService {
           }
         }
       });
-      console.log('estjt : ', {
+
+      console.log('gold estjt : ', {
         site: 'estjt',
         prices,
       });
@@ -158,7 +159,7 @@ export class GoldService {
 
       const price = rawPrice ? Number(rawPrice) : null;
 
-      console.log('tablotala', {
+      console.log('gold tablotala', {
         site: 'tablotala',
         prices: [price && !isNaN(price) ? price : 0],
       });
@@ -214,7 +215,7 @@ export class GoldService {
       });
 
       const price = rawPrice ? Number(rawPrice) : 0;
-      console.log('tabangohar :', {
+      console.log('gold tabangohar :', {
         site: 'tabangohar',
         prices: [price && !isNaN(price) ? price : 0],
       });
@@ -252,7 +253,7 @@ export class GoldService {
 
       const cleaned = this.toEnglishDigits(rawText).replace(/[^\d]/g, '');
       const price = cleaned ? Number(cleaned) : null;
-      console.log('talaIR', {
+      console.log('gold talaIR', {
         site: 'tala.ir',
         prices: [price && !isNaN(price) ? price : 0],
       });
@@ -296,7 +297,7 @@ export class GoldService {
       const cleaned = text.replace(/[^\d.]/g, '');
       const price = cleaned ? Number(cleaned) : null;
 
-      console.log('kitco:', {
+      console.log('gold kitco:', {
         site: 'kitco',
         prices: [price && !isNaN(price) ? price : 0],
       });
@@ -434,6 +435,8 @@ export class GoldService {
       tomanGlobalPrice,
       bubble,
     };
+
+    console.log("gold average:",average,"tomanoGoldPrice:",tomanGlobalPrice, "gold bubble:",bubble, )
     const gold = await this.createGoldPrices(goldDto);
     return gold;
   }
