@@ -272,50 +272,37 @@ export class GoldService {
   }
 
   // 🔸 Site 5 - kitco.com
-  async getPriceFromKitco(): Promise<{ site: string; prices: [number] }> {
-    let browser: Browser | null = null;
+async getPriceFromKitco(): Promise<{ site: string; price: [number] }> {
+  try {
+    const { data } = await axios.get(
+      'https://www.kitco.com/api/kitco-xml/precious-metals',
+      { timeout: 15000 },
+    );
 
-    try {
-      browser = await puppeteer.launch(this.browserConfig);
-      const page = await browser.newPage();
+    const gold = data?.data?.find(
+      (item: any) => item.commodity === 'Gold',
+    );
 
-      await page.goto('https://www.kitco.com/', {
-        waitUntil: 'domcontentloaded',
-        timeout: 60000,
-      });
+    const price =
+      typeof gold?.lastBid?.bidVal === 'number'
+        ? gold.lastBid.bidVal
+        : 0;
 
-      const selector =
-        'main div.flex > div:nth-child(1) div.text-right.font-medium';
+    console.log('gold kitco:', {
+      site: 'kitco',
+      price: [price],
+    });
 
-      await page.waitForSelector(selector, { timeout: 15000 });
-
-      const text = await page.$eval(
-        selector,
-        (el) => el.textContent?.trim() || '',
-      );
-
-      const cleaned = text.replace(/[^\d.]/g, '');
-      const price = cleaned ? Number(cleaned) : null;
-
-      console.log('gold kitco:', {
-        site: 'kitco',
-        prices: [price && !isNaN(price) ? price : 0],
-      });
-
-      return {
-        site: 'kitco',
-        prices: [price && !isNaN(price) ? price : 0],
-      };
-    } catch (error) {
-      console.error('Error fetching price from kitco:', error);
-      return {
-        site: 'kitco',
-        prices: [0],
-      };
-    } finally {
-      await this.safeCloseBrowser(browser);
-    }
+    return {
+      site: 'kitco',
+      price: [price],
+    };
+  } catch (error) {
+    console.error('Error fetching Kitco gold price:', error);
+    return { site: 'kitco', price: [0] };
   }
+}
+
 
   // return bubble and global gold price (Foreign gold price in Tomans) and avrage of gold price in iran
 
@@ -391,7 +378,7 @@ export class GoldService {
     ]);
 
     const tomanPerDollar = await this.usdToIrrService.getTomanPerDollar();
-    const kitcoPrice = Number(kitco.prices) || 0;
+    const kitcoPrice = Number(kitco.price) || 0;
     const tomanGlobalPrice = Math.floor(
       (kitcoPrice * tomanPerDollar) / 28.3495,
     );
@@ -419,7 +406,7 @@ export class GoldService {
       }
     }
     const average = sum / count;
-    const globalPrices = [kitco.prices];
+    const globalPrices = [kitco.price];
     const globalSiteNames = [kitco.site];
     const bubble = ((average - tomanGlobalPrice) / average) * 100;
 

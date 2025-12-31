@@ -420,57 +420,33 @@ export class SilverService {
       );
 
       await page.goto('https://noghresea.ir/', {
-        waitUntil: 'domcontentloaded',
+        waitUntil: 'networkidle2',
         timeout: 60000,
       });
 
-      // ✅ wait until XPath element has text
-      await page.waitForFunction(
-        () => {
-          const result = document.evaluate(
-            '/html/body/main/section[2]/div/div/div[1]/div[2]/span[1]',
-            document,
-            null,
-            XPathResult.FIRST_ORDERED_NODE_TYPE,
-            null,
-          );
-          return result.singleNodeValue?.textContent?.trim().length;
-        },
-        { timeout: 60000 },
-      );
+      // کمی صبر برای اجرای JS
+      await new Promise((r) => setTimeout(r, 3000));
 
-      const text = await page.evaluate(() => {
-        const result = document.evaluate(
-          '/html/body/main/section[2]/div/div/div[1]/div[2]/span[1]',
-          document,
-          null,
-          XPathResult.FIRST_ORDERED_NODE_TYPE,
-          null,
+      const data = await page.evaluate(async () => {
+        const res = await fetch(
+          'https://api.noghresea.ir/api/market/getSilverPrice',
         );
-        return result.singleNodeValue?.textContent?.trim() || '';
+        return res.json();
       });
 
-      if (text === '') {
-        try {
-          throw new Error('silverin price element empty');
-        } catch (error) {
-          console.error('Internal error:', error);
-        }
+      const rawPrice = Number(data?.price); // "368.28"
+      const finalPrice = Number.isFinite(rawPrice)
+        ? Math.round(rawPrice * 1000) 
+        : 0;
 
-        return {
-          site: 'tokeniko',
-          price: [0],
-        };
-      }
-
-      const price = Number(text.replace(/,/g, ''));
-      console.log('silver noghresea : ', {
+      console.log('silver noghresea:', {
         site: 'noghresea',
-        price: Number.isFinite(price) ? [price] : [0],
+        price: [finalPrice],
       });
+
       return {
-        site: 'silver noghresea',
-        price: Number.isFinite(price) ? [price] : [0],
+        site: 'noghresea',
+        price: [finalPrice],
       };
     } catch (error) {
       console.error('❌ Error fetching Noghresea price:', error);
@@ -531,7 +507,11 @@ export class SilverService {
   //bars
 
   // 🔸 Site 1 - tokeniko.com silver bars
-  async getTokenikoSilverBars(): Promise<{site: string;weight: [number];price: [number];}> {
+  async getTokenikoSilverBars(): Promise<{
+    site: string;
+    weight: [number];
+    price: [number];
+  }> {
     let browser: Browser | null = null;
 
     try {
@@ -624,7 +604,11 @@ export class SilverService {
   }
 
   // 🔸 Site 2 - parsisgold.com silver bars
-  async getParsisSilverBars(): Promise<{site: string;weight: [number];price: [number];}> {
+  async getParsisSilverBars(): Promise<{
+    site: string;
+    weight: [number];
+    price: [number];
+  }> {
     let browser: Browser | null = null;
 
     try {
@@ -691,7 +675,11 @@ export class SilverService {
   }
 
   // 🔸 Site 3 - zioto.gold silver bars
-  async getZiotoSilverBars(): Promise<{site: string;weight: [number];price: [number];}> {
+  async getZiotoSilverBars(): Promise<{
+    site: string;
+    weight: [number];
+    price: [number];
+  }> {
     let browser: Browser | null = null;
 
     try {
@@ -938,5 +926,4 @@ export class SilverService {
     const silver = await this.createSilver(silverDto);
     return silver;
   }
-
 }
