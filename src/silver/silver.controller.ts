@@ -14,6 +14,21 @@ import { SilverRo } from './dto/silver.ro';
 export class SilverController {
   constructor(private readonly silverService: SilverService) {}
 
+  @Get('public')
+  @ApiOperation({ summary: 'Get last saved silver price (public, no auth required)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns the latest silver price',
+    type: SilverRo,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'No silver price records found',
+  })
+  async getLatestSilverPricePublic() {
+    return await this.silverService.getNewestSilverFromDB();
+  }
+
   @Get()
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()

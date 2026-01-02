@@ -10,9 +10,14 @@ async function bootstrap() {
 
   const app = await NestFactory.create(AppModule);
 
-  // Enable CORS for frontend
+  // Enable CORS for frontend - allow requests from frontend and main backend
   app.enableCors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3001',
+    origin: [
+      process.env.FRONTEND_URL || 'http://localhost:3001',
+      process.env.MAIN_BACKEND_URL || 'http://localhost:8000',
+      'http://localhost:3000', // Next.js default
+      'http://localhost:3001', // Alternative frontend port
+    ],
     credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
