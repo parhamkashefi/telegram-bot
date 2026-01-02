@@ -1,33 +1,33 @@
 services:
-  telegram-bot-dev:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    container_name: nestjs_telegram_bot_dev
-    restart: unless-stopped
-    env_file:
-      - .env
-    ports:
-      - "3002:3000"
-    depends_on:
-      - mongo
-    volumes:
-      - ./src:/usr/src/app/src
-      - ./package.json:/usr/src/app/package.json
-      - ./tsconfig.json:/usr/src/app/tsconfig.json
-      - ./nest-cli.json:/usr/src/app/nest-cli.json
-      - /usr/src/app/node_modules
-      # - /usr/src/app/dist
-    working_dir: /usr/src/app
-    shm_size: 1g
-    ulimits:
-      nofile:
-        soft: 65536
-        hard: 65536
-    environment:
-      - CHOKIDAR_USEPOLLING=true
-      - WATCHPACK_POLLING=true
-    command: sh -c "npm run start:dev"
+  # telegram-bot-dev:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.dev
+  #   container_name: nestjs_telegram_bot_dev
+  #   restart: unless-stopped
+  #   env_file:
+  #     - .env
+  #   ports:
+  #     - "3002:3000"
+  #   depends_on:
+  #     - mongo
+  #   volumes:
+  #     - ./src:/usr/src/app/src
+  #     - ./package.json:/usr/src/app/package.json
+  #     - ./tsconfig.json:/usr/src/app/tsconfig.json
+  #     - ./nest-cli.json:/usr/src/app/nest-cli.json
+  #     - /usr/src/app/node_modules
+  #     # - /usr/src/app/dist
+  #   working_dir: /usr/src/app
+  #   shm_size: 1g
+  #   ulimits:
+  #     nofile:
+  #       soft: 65536
+  #       hard: 65536
+  #   environment:
+  #     - CHOKIDAR_USEPOLLING=true
+  #     - WATCHPACK_POLLING=true
+  #   command: sh -c "npm run start:dev"
 
   mongo:
     image: mongo:4.4
@@ -37,5 +37,5 @@ services:
       - "27018:27017"
     volumes:
       - ./data/mongo:/data/db
-    networks:
-      - default
+    # networks:
+    #   - default

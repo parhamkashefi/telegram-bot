@@ -235,39 +235,46 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
   async sendCombinedPrices(chatId): Promise<any> {
     console.log('🔄 Fetching combined prices...');
 
-    const [prices] = await Promise.all([
-      this.goldService.getAllGoldPrices(),
-      this.silverService.getAll999SilverPrices(),
-    ]);
+    try {
+      const [goldPrices, silverPrices] = await Promise.all([
+        this.goldService.getAllGoldPrices(),
+        this.silverService.getAll999SilverPrices(),
+      ]);
 
-    const silverSiteNames = [
-      'noghra',
-      'tokeniko',
-      'silverin',
-      'noghresea',
-      'kitco',
-    ];
-    const goldSiteNames = [
-      'estjt',
-      'tablotala',
-      'tabanGohar',
-      'talaIr',
-      'kitco',
-    ];
+      const silverSiteNames = [
+        'noghra',
+        'tokeniko',
+        'silverin',
+        'noghresea',
+        'kitco',
+      ];
+      const goldSiteNames = [
+        'estjt',
+        'tablotala',
+        'tabanGohar',
+        'talaIr',
+        'kitco',
+      ];
 
-    const silverMessage = await this.Silver999TelegramMessage(
-      prices,
-      silverSiteNames,
-    );
+      const silverMessage = await this.Silver999TelegramMessage(
+        silverPrices,
+        silverSiteNames,
+      );
 
-    const goldMessage = await this.GoldTelegramMessage(
-      prices,
-      goldSiteNames
-    )
+      const goldMessage = await this.GoldTelegramMessage(
+        goldPrices,
+        goldSiteNames
+      )
 
-    await this.bot.sendMessage(chatId, silverMessage);
-    await this.bot.sendMessage(chatId, goldMessage);
+      await this.bot.sendMessage(chatId, silverMessage);
+      await this.bot.sendMessage(chatId, goldMessage);
 
-    console.log('✅ Combined prices sent to Telegram');
+      console.log('✅ Combined prices sent to Telegram');
+    } catch (error) {
+      console.error('❌ Error in sendCombinedPrices:', error);
+      // Optionally send an error message to the user
+      // await this.bot.sendMessage(chatId, '❌ خطا در دریافت قیمت‌ها');
+      throw error; // Re-throw if you want the caller to handle it
+    }
   }
 }

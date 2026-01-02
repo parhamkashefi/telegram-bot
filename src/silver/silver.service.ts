@@ -294,7 +294,7 @@ export class SilverService {
       const { data } = await axios.get(
         'https://tokeniko.com/products/silver-grain-1ounce-fine',
         {
-          timeout: 45000,
+          timeout: 20000, // Reduced from 45000ms to 20s for faster failure
           headers: {
             'User-Agent':
               'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -336,7 +336,12 @@ export class SilverService {
         price: [!isNaN(perGram) ? perGram : 0],
       };
     } catch (error) {
-      console.error('Error fetching Tokeniko price:', error);
+      // More specific error logging
+      if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+        console.error('❌ Tokeniko: Request timeout (site not responding)');
+      } else {
+        console.error('Error fetching Tokeniko price:', error);
+      }
       return { site: 'tokeniko', price: [0] };
     }
   }
@@ -350,13 +355,25 @@ export class SilverService {
       browser = await puppeteer.launch(this.browserConfig);
       page = await browser.newPage();
 
+      // Block unnecessary resources to speed up page loading
+      await page.setRequestInterception(true);
+      page.on('request', (req) => {
+        const resourceType = req.resourceType();
+        // Only allow document, script, and xhr requests (needed for dynamic content)
+        if (['image', 'stylesheet', 'font', 'media'].includes(resourceType)) {
+          req.abort();
+        } else {
+          req.continue();
+        }
+      });
+
       await page.setUserAgent(
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       );
 
       await page.goto('https://silverin.ir/product/ساچمه-نقره-10-گرمی-999/', {
         waitUntil: 'domcontentloaded',
-        timeout: 30000,
+        timeout: 15000, // Reduced from 30000ms to 15s for faster failure
       });
 
       // ✅ wait until WooCommerce price is filled
@@ -365,7 +382,7 @@ export class SilverService {
           const el = document.querySelector('p.price bdi');
           return el && el.textContent && el.textContent.trim().length > 0;
         },
-        { timeout: 10000 },
+        { timeout: 5000 }, // Reduced from 10000ms to 5s
       );
 
       const text = await page.evaluate(() => {
@@ -400,7 +417,16 @@ export class SilverService {
         price: [perGram],
       };
     } catch (error) {
-      console.error('Error fetching Silverin price:', error);
+      // More specific error logging
+      if (error.name === 'TimeoutError') {
+        if (error.message.includes('Navigation timeout')) {
+          console.error('❌ Silverin: Page navigation timeout (page not loading)');
+        } else {
+          console.error('❌ Silverin: Element wait timeout (element not found)');
+        }
+      } else {
+        console.error('Error fetching Silverin price:', error);
+      }
       return { site: 'silverin', price: [0] };
     } finally {
       await this.safeClosePage(page);
@@ -416,17 +442,31 @@ export class SilverService {
       browser = await puppeteer.launch(this.browserConfig);
       const page = await browser.newPage();
 
+      // Block unnecessary resources to speed up page loading
+      await page.setRequestInterception(true);
+      page.on('request', (req) => {
+        const resourceType = req.resourceType();
+        // Only allow document, script, and xhr requests (needed for dynamic content)
+        if (['image', 'stylesheet', 'font', 'media'].includes(resourceType)) {
+          req.abort();
+        } else {
+          req.continue();
+        }
+      });
+
       await page.setUserAgent(
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       );
 
+      // Use domcontentloaded instead of networkidle2 for much faster loading
+      // networkidle2 waits for no network activity, which can take very long
       await page.goto('https://noghresea.ir/', {
-        waitUntil: 'networkidle2',
-        timeout: 60000,
+        waitUntil: 'domcontentloaded',
+        timeout: 20000, // Reduced from 60000ms to 20s
       });
 
-      // کمی صبر برای اجرای JS
-      await new Promise((r) => setTimeout(r, 3000));
+      // کمی صبر برای اجرای JS (reduced from 3000ms to 2000ms)
+      await new Promise((r) => setTimeout(r, 2000));
 
       const data = await page.evaluate(async () => {
         const res = await fetch(
@@ -450,7 +490,16 @@ export class SilverService {
         price: [finalPrice],
       };
     } catch (error) {
-      console.error('❌ Error fetching Noghresea price:', error);
+      // More specific error logging
+      if (error.name === 'TimeoutError') {
+        if (error.message.includes('Navigation timeout')) {
+          console.error('❌ Noghresea: Page navigation timeout (page not loading)');
+        } else {
+          console.error('❌ Noghresea: Element/API timeout');
+        }
+      } else {
+        console.error('❌ Error fetching Noghresea price:', error);
+      }
       return { site: 'noghresea', price: [0] };
     } finally {
       await this.safeCloseBrowser(browser);
