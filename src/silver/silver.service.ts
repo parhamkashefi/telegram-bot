@@ -258,17 +258,14 @@ export class SilverService {
 
       const $ = cheerio.load(data);
 
-      const text = $('table tbody tr:nth-child(1) td p span strong spans')
+      const text = $('table tbody tr:nth-child(1) td p span strong span')
         .eq(1)
         .text()
         .trim();
 
-      if (text === '') {
-        try {
-          throw new Error('noghra price element empty');
-        } catch (error) {
-          console.error('Internal error:', error);
-        }
+      // Check if text is empty and throw error
+      if (!text || text.length === 0) {
+        throw new Error('noghra price element empty');
       }
 
       const cleaned = this.toEnglishDigits(text).replace(/[^\d]/g, '');
@@ -283,6 +280,10 @@ export class SilverService {
       };
     } catch (error) {
       console.error('Error fetching Noghra price:', error);
+      // Log the specific error message
+      if (error.message === 'noghra price element empty') {
+        console.error('Internal error:', error);
+      }
       return { site: 'noghra', price: [0] };
     }
   }
@@ -875,10 +876,30 @@ export class SilverService {
       }
     }
 
-    const average = sum / count;
+    // Fix: Check if count is 0 to avoid NaN
+    let average = 0;
+    if (count > 0) {
+      average = sum / count;
+    } else {
+      console.warn('⚠️ All silver prices are 0, cannot calculate average');
+      // Optionally, you could skip saving or use a default value
+      // For now, we'll set average to 0 and skip bubble calculation
+    }
+
     const globalPrices = [kitco.price];
     const globalSiteNames = [kitco.site];
-    const bubble = ((average - tomanGlobalPrice) / average) * 100;
+    
+    // Fix: Only calculate bubble if average is valid (not NaN, not 0)
+    let bubble = 0;
+    if (average > 0 && !isNaN(average) && tomanGlobalPrice > 0) {
+      bubble = ((average - tomanGlobalPrice) / average) * 100;
+    } else {
+      console.warn('⚠️ Cannot calculate bubble: average or tomanGlobalPrice is invalid');
+    }
+
+    // Fix: Validate values before saving to avoid MongoDB validation errors
+    const finalAverage = isNaN(average) || !isFinite(average) ? 0 : average;
+    const finalBubble = isNaN(bubble) || !isFinite(bubble) ? 0 : bubble;
 
     const silverDto = {
       productType: 'ball999',
@@ -888,9 +909,9 @@ export class SilverService {
       globalPrices,
       weights: [[1], [1], [1], [1], [1]],
       tomanPerDollar,
-      average,
+      average: finalAverage,
       tomanGlobalPrice,
-      bubble,
+      bubble: finalBubble,
     };
 
     const silver = await this.createSilver(silverDto);
