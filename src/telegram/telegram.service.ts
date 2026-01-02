@@ -71,8 +71,19 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
   private async sendGoldPrice(chatId: number | string) {
     await this.bot.sendMessage(chatId, '⏳ در حال دریافت قیمت طلا...');
 
-    // const prices = await this.goldService.getAllGoldPrices();
-    // await this.bot.sendMessage(chatId, prices);
+    const goldPrices = await this.goldService.getAllGoldPrices();
+    const goldSiteNames = [
+      'estjt',
+      'tablotala',
+      'tabanGohar',
+      'talaIr',
+      'kitco',
+    ];
+    const goldMessage = await this.GoldTelegramMessage(
+      goldPrices,
+      goldSiteNames
+    );
+    await this.bot.sendMessage(chatId, goldMessage);
   }
 
   private async sendSilverPrice(chatId: number | string) {
