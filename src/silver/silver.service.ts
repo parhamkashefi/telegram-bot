@@ -818,8 +818,10 @@ export class SilverService {
 
   async getNewestSilverFromDB(): Promise<SilverRo | null> {
     try {
+      // Since all records in silver collection are silver prices, we don't need to filter
+      // Just get the newest record
       const newest = await this.silverModel
-        .findOne({ productMaterial: 'silver' })
+        .findOne()
         .sort({ createdAt: -1 })
         .lean()
         .exec();

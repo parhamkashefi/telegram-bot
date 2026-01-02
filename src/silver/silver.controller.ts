@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, UseGuards, NotFoundException } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -26,7 +26,11 @@ export class SilverController {
     description: 'No silver price records found',
   })
   async getLatestSilverPricePublic() {
-    return await this.silverService.getNewestSilverFromDB();
+    const silverPrice = await this.silverService.getNewestSilverFromDB();
+    if (!silverPrice) {
+      throw new NotFoundException('No silver price records found');
+    }
+    return silverPrice;
   }
 
   @Get()
