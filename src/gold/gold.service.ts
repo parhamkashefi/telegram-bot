@@ -333,7 +333,7 @@ async getPriceFromKitco(): Promise<{ site: string; price: [number] }> {
   async getPreviousGoldFromDB(): Promise<GoldDocument | null> {
     try {
       const previous = await this.goldModel
-        .find({ productMaterial: 'gold' })
+        .find({ productType: 'gold' })
         .sort({ createdAt: -1 })
         .skip(1)
         .limit(1)
@@ -348,7 +348,7 @@ async getPriceFromKitco(): Promise<{ site: string; price: [number] }> {
 
   async getNewestGoldFromDB(): Promise<GoldRo | null> {
     try {
-      const newest = await this.goldModel.findOne({ productMaterial: 'gold' });
+      const newest = await this.goldModel.findOne({ productType: 'gold' }).sort({ createdAt: -1 });
 
       if (!newest) return null;
 
@@ -356,7 +356,7 @@ async getPriceFromKitco(): Promise<{ site: string; price: [number] }> {
         excludeExtraneousValues: true,
       });
     } catch (error) {
-      console.error('❌ Error getting newest silver from DB:', error);
+      console.error('❌ Error getting newest gold from DB:', error);
       return null;
     }
   }
