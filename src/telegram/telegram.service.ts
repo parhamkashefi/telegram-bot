@@ -81,7 +81,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     ];
     const goldMessage = await this.GoldTelegramMessage(
       goldPrices,
-      goldSiteNames
+      goldSiteNames,
     );
     await this.bot.sendMessage(chatId, goldMessage);
   }
@@ -116,7 +116,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     ); // 30 minutes
   }
 
-  private silverPersianName(site: string): string {
+  private silverBallPersianName(site: string): string {
     const map: Record<string, string> = {
       sarzamineshemsh: 'سرزمین شمش',
       tajnoghreh: 'تاج نقره',
@@ -124,6 +124,17 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       tokeniko: 'توکنیکو',
       silverin: 'سیلورین',
       noghresea: 'نقره سی',
+      kitco: 'کیتکو',
+    };
+
+    return map[site] ?? site;
+  }
+
+  private silverBarPersianName(site: string): string {
+    const map: Record<string, string> = {
+      tokenikoBar: 'توکنیکو',
+      parsis: 'پارسیس',
+      zioto: 'زیوتو',
       kitco: 'کیتکو',
     };
 
@@ -159,45 +170,36 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     return numValue.toLocaleString('fa-IR');
   }
 
-  // async Silver995TelegramMessage(
-  //   silver: SilverRo,
-  //   siteNames: string[],
-  // ): Promise<string> {
-  //   let message = `📊 قیمت نقره عیار(۹۹۵)  (${silver.productType})\n\n`;
+  async SilverBarTelegramMessage(silver: SilverRo,siteNames: string[]): Promise<string> {
+    let message = `📊 قیمت شمش نقره\n\n`;
 
-  //   siteNames.forEach((site, i) => {
-  //     message += `🌐 ${this.toPersianName(site)}\n`;
+    siteNames.forEach((site, i) => {
+      message += `🌐 ${this.silverBarPersianName(site)}\n`;
 
-  //     const prices = silver.prices[i] || [];
-  //     const weights = silver.weights?.[i] || [];
+      const prices = silver.prices?.[i] || [];
+      const weights = silver.weights?.[i] || [];
 
-  //     weights.forEach((weight, j) => {
-  //       const price = prices[j];
-  //       if (price == null) return;
+      weights.forEach((weight, j) => {
+        const price = prices[j];
+        if (price == null || price === 0) return;
 
-  //       message += `🔹 ${this.toPersianNumber(weight)} گرم : ${this.toPersianNumber(price)} تومان\n`;
-  //     });
+        message += `🔹 ${this.toPersianNumber(weight)} گرم : ${this.toPersianNumber(price)} تومان\n`;
+      });
 
-  //     message += '\n';
-  //   });
+      message += '\n';
+    });
 
-  //   message += `💱 نرخ دلار: ${this.toPersianNumber(silver.tomanPerDollar)} تومان\n`;
-  //   // message += `🕒 آخرین بروزرسانی: ${moment(silver.createdAt)
-  //   //   .locale('fa')
-  //   //   .format('jYYYY/jMM/jDD')}`;
+    message += `$ نرخ نقره جهانی: ${this.toPersianNumber(silver.tomanGlobalPrice)} تومان\n`;
+    message += `💱 نرخ دلار: ${this.toPersianNumber(silver.tomanPerDollar)} تومان\n`;
+    message += `🕒 آخرین بروزرسانی: ${moment(silver.createdAt).format('jYYYY/jMM/jDD HH:mm')}`;
 
-  //   message += `🕒 آخرین بروزرسانی: ${moment(silver.createdAt).format('jYYYY/jMM/jDD')}`;
+    return message;
+  }
 
-  //   return message;
-  // }
-
-  async Silver999TelegramMessage(
-    silver: SilverRo,
-    siteNames: string[],
-  ): Promise<string> {
+  async Silver999TelegramMessage(silver: SilverRo,siteNames: string[]): Promise<string> {
     let message = `📊 قیمت نقره عیار(۹۹۹)\n\n`;
     siteNames.forEach((site, i) => {
-      message += `🌐 ${this.silverPersianName(site)}\n`;
+      message += `🌐 ${this.silverBallPersianName(site)}\n`;
 
       const prices = silver.prices[i] || [];
       const weights = silver.weights?.[i] || [];
@@ -217,7 +219,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     return message;
   }
 
-  async GoldTelegramMessage(gold: GoldRo,siteNames: string[],): Promise<string> {
+  async GoldTelegramMessage(gold: GoldRo,siteNames: string[]): Promise<string> {
     let message = `📊 قیمت طلا\n\n`;
 
     siteNames.forEach((site, i) => {
@@ -247,12 +249,20 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     console.log('🔄 Fetching combined prices...');
 
     try {
-      const [goldPrices, silverPrices] = await Promise.all([
+      const [goldPrices, silverBallPrices,silverBarPrices] = await Promise.all([
         this.goldService.getAllGoldPrices(),
         this.silverService.getAll999SilverPrices(),
+        this.silverService.getAllSilverBarPrices(),
       ]);
 
-      const silverSiteNames = [
+      const silverBarSiteNames =[
+        'tokenikoBar',
+        'parsis',
+        'zioto',
+        'kitco'
+      ]
+
+      const silverBallSiteNames = [
         'noghra',
         'tokeniko',
         'silverin',
@@ -267,17 +277,22 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         'kitco',
       ];
 
-      const silverMessage = await this.Silver999TelegramMessage(
-        silverPrices,
-        silverSiteNames,
+      const silverBarMessage = await this.SilverBarTelegramMessage(
+        silverBarPrices,
+        silverBarSiteNames,
+      );
+
+      const silverBallMessage = await this.Silver999TelegramMessage(
+        silverBallPrices,
+        silverBallSiteNames,
       );
 
       const goldMessage = await this.GoldTelegramMessage(
         goldPrices,
-        goldSiteNames
-      )
-
-      await this.bot.sendMessage(chatId, silverMessage);
+        goldSiteNames,
+      );
+      await this.bot.sendMessage(chatId,silverBarMessage)
+      await this.bot.sendMessage(chatId, silverBallMessage);
       await this.bot.sendMessage(chatId, goldMessage);
 
       console.log('✅ Combined prices sent to Telegram');

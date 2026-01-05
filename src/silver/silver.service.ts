@@ -557,11 +557,7 @@ export class SilverService {
   //bars
 
   // 🔸 Site 1 - tokeniko.com silver bars
-  async getTokenikoSilverBars(): Promise<{
-    site: string;
-    weight: [number];
-    price: [number];
-  }> {
+  async getTokenikoSilverBars(): Promise<{site: string;weight: [number];price: [number];}> {
     let browser: Browser | null = null;
 
     try {
@@ -654,11 +650,7 @@ export class SilverService {
   }
 
   // 🔸 Site 2 - parsisgold.com silver bars
-  async getParsisSilverBars(): Promise<{
-    site: string;
-    weight: [number];
-    price: [number];
-  }> {
+  async getParsisSilverBars(): Promise<{site: string;weight: [number];price: [number];}> {
     let browser: Browser | null = null;
 
     try {
@@ -707,15 +699,21 @@ export class SilverService {
       const english = this.toEnglishDigits(cleaned);
       const numericPrice = Number(english.replace(/,/g, ''));
 
+      console.log("parsis bar : ",{
+        site: 'parsis',
+        weight: [1000],
+        price: isNaN(numericPrice) ? [0] : [numericPrice],
+      })
+
       return {
-        site: 'parsisgold',
+        site: 'parsis',
         weight: [1000],
         price: isNaN(numericPrice) ? [0] : [numericPrice],
       };
     } catch (err) {
       console.error('Parsis scrape error:', err);
       return {
-        site: 'parsisgold',
+        site: 'parsis',
         weight: [0],
         price: [0],
       };
@@ -724,12 +722,8 @@ export class SilverService {
     }
   }
 
-  // 🔸 Site 3 - zioto.gold silver bars
-  async getZiotoSilverBars(): Promise<{
-    site: string;
-    weight: [number];
-    price: [number];
-  }> {
+  // 🔸 Site 3 - zioto silver bars
+  async getZiotoSilverBars(): Promise<{site: string;weight: [number];price: [number];}> {
     let browser: Browser | null = null;
 
     try {
@@ -798,6 +792,11 @@ export class SilverService {
 
         prices.push(isNaN(numericPrice) ? 0 : numericPrice);
       }
+      console.log("zioto bar : ",{
+        site: 'zioto',
+        weight: weights,
+        price: prices,
+      })
 
       return {
         site: 'zioto',
@@ -854,7 +853,6 @@ export class SilverService {
   }
 
   async createSilver(silverDto: SilverDto): Promise<SilverRo> {
-    console.log(silverDto);
     const silver = await this.silverModel.create(silverDto);
 
     console.log('silver saved in db');

@@ -272,63 +272,56 @@ export class GoldService {
   }
 
   // 🔸 Site 5 - kitco.com
-async getPriceFromKitco(): Promise<{ site: string; price: [number] }> {
-  try {
-    const { data } = await axios.get(
-      'https://www.kitco.com/api/kitco-xml/precious-metals',
-      { timeout: 15000 },
-    );
+  async getPriceFromKitco(): Promise<{ site: string; price: [number] }> {
+    let browser: Browser | null = null;
 
-    const gold = data?.data?.find(
-      (item: any) => item.commodity === 'Gold',
-    );
+    try {
+      browser = await puppeteer.launch(this.browserConfig);
+      const page = await browser.newPage();
 
-    const price =
-      typeof gold?.lastBid?.bidVal === 'number'
-        ? gold.lastBid.bidVal
-        : 0;
+      await page.setUserAgent(
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      );
 
-    console.log('gold kitco:', {
-      site: 'kitco',
-      price: [price],
-    });
+      await page.goto(
+        'https://online.kitco.com/sell/126/0-7500-Pure-Gold-Bar-or-Coin-18-K-126',
+        {
+          waitUntil: 'networkidle2',
+          timeout: 60000,
+        },
+      );
 
-    return {
-      site: 'kitco',
-      price: [price],
-    };
-  } catch (error) {
-    console.error('Error fetching Kitco gold price:', error);
-    return { site: 'kitco', price: [0] };
+      await page.waitForSelector('span.price_product.per-g', {
+        timeout: 30000,
+      });
+
+      const text = await page.$eval(
+        'span.price_product.per-g',
+        (el) => el.textContent || '',
+      );
+
+      const cleaned = text.replace(/[^\d.]/g, '');
+      const price = Number(parseFloat(cleaned).toFixed(2));
+
+      console.log('gold kitco : ', {
+        site: 'kitco.com',
+        price: [Number.isFinite(price) ? price : 0],
+      });
+
+      return {
+        site: 'kitco.com',
+        price: [Number.isFinite(price) ? price : 0],
+      };
+    } catch (error) {
+      console.error('❌ Error fetching Kitco gold price:', error);
+      return {
+        site: 'kitco.com',
+        price: [0],
+      };
+    } finally {
+      await this.safeCloseBrowser(browser);
+    }
   }
-}
-
-
-  // return bubble and global gold price (Foreign gold price in Tomans) and avrage of gold price in iran
-
-  // async goldPanel(): Promise<any> {
-  //   const goldPrices = await this.getNewestGoldFromDB();
-  //   let sum = 0;
-  //   let counter = 0;
-  //   if (goldPrices == null) {
-  //     return 0;
-  //   }
-  //   for (const price in goldPrices.prices) {
-  //     if (goldPrices?.prices[price] != null && goldPrices?.prices[price] != 0) {
-  //       sum = goldPrices.prices[price] + sum;
-  //       counter = counter + 1;
-  //     }
-  //   }
-  //   const avrageGoldPrice = sum / counter;
-  //   const goldDollarPrice = goldPrices?.dollarPrices || 0;
-  //   const dollar = await this.goldModel
-  //     .find({ tomanPerDollar: { $gt: 0 } })
-  //     .sort({ createdAt: -1 })[0];
-  //   const dollarPrice = dollar?.tomanPerDollar;
-  //   const globalGoldPrice = Number(goldDollarPrice) * dollarPrice;
-  //   const bubble = (avrageGoldPrice - globalGoldPrice) / avrageGoldPrice;
-  //   return { bubble, globalGoldPrice, avrageGoldPrice };
-  // }
 
   async getPreviousGoldFromDB(): Promise<GoldDocument | null> {
     try {
@@ -348,7 +341,9 @@ async getPriceFromKitco(): Promise<{ site: string; price: [number] }> {
 
   async getNewestGoldFromDB(): Promise<GoldRo | null> {
     try {
-      const newest = await this.goldModel.findOne({ productType: 'gold' }).sort({ createdAt: -1 });
+      const newest = await this.goldModel
+        .findOne({ productType: 'gold' })
+        .sort({ createdAt: -1 });
 
       if (!newest) return null;
 
@@ -379,9 +374,8 @@ async getPriceFromKitco(): Promise<{ site: string; price: [number] }> {
 
     const tomanPerDollar = await this.usdToIrrService.getTomanPerDollar();
     const kitcoPrice = Number(kitco.price) || 0;
-    const tomanGlobalPrice = Math.floor(
-      (kitcoPrice * tomanPerDollar) / 28.3495,
-    );
+    const tomanGlobalPrice = Math.floor(kitcoPrice * tomanPerDollar);
+    console.log('tomanGlobalPrice : ', tomanGlobalPrice);
 
     const prices = [
       estjt.prices,
@@ -405,10 +399,28 @@ async getPriceFromKitco(): Promise<{ site: string; price: [number] }> {
         count++;
       }
     }
-    const average = sum / count;
+    let average = 0;
+    if (count > 0) {
+      average = sum / count;
+      console.log('average : ', average);
+    } else {
+      console.warn('⚠️ All silver prices are 0, cannot calculate average');
+    }
+
     const globalPrices = [kitco.price];
     const globalSiteNames = [kitco.site];
-    const bubble = ((average - tomanGlobalPrice) / average) * 100;
+
+    let bubble = 0;
+    if (average > 0 && !isNaN(average) && tomanGlobalPrice > 0) {
+      bubble = ((average - tomanGlobalPrice) / average) * 100;
+      console.log('gold bubble : ', bubble);
+    } else {
+      console.warn(
+        '⚠️ Cannot calculate bubble: average or tomanGlobalPrice is invalid',
+      );
+    }
+    const finalAverage = isNaN(average) || !isFinite(average) ? 0 : average;
+    const finalBubble = isNaN(bubble) || !isFinite(bubble) ? 0 : bubble;
 
     const goldDto = {
       productType: 'gold',
@@ -418,13 +430,38 @@ async getPriceFromKitco(): Promise<{ site: string; price: [number] }> {
       globalPrices,
       weights: [[1], [1], [1], [1]],
       tomanPerDollar,
-      average,
+      average: finalAverage,
       tomanGlobalPrice,
-      bubble,
+      bubble: finalBubble,
     };
 
-    console.log("gold average:",average,"tomanoGoldPrice:",tomanGlobalPrice, "gold bubble:",bubble, )
     const gold = await this.createGoldPrices(goldDto);
     return gold;
   }
 }
+
+// return bubble and global gold price (Foreign gold price in Tomans) and avrage of gold price in iran
+
+// async goldPanel(): Promise<any> {
+//   const goldPrices = await this.getNewestGoldFromDB();
+//   let sum = 0;
+//   let counter = 0;
+//   if (goldPrices == null) {
+//     return 0;
+//   }
+//   for (const price in goldPrices.prices) {
+//     if (goldPrices?.prices[price] != null && goldPrices?.prices[price] != 0) {
+//       sum = goldPrices.prices[price] + sum;
+//       counter = counter + 1;
+//     }
+//   }
+//   const avrageGoldPrice = sum / counter;
+//   const goldDollarPrice = goldPrices?.dollarPrices || 0;
+//   const dollar = await this.goldModel
+//     .find({ tomanPerDollar: { $gt: 0 } })
+//     .sort({ createdAt: -1 })[0];
+//   const dollarPrice = dollar?.tomanPerDollar;
+//   const globalGoldPrice = Number(goldDollarPrice) * dollarPrice;
+//   const bubble = (avrageGoldPrice - globalGoldPrice) / avrageGoldPrice;
+//   return { bubble, globalGoldPrice, avrageGoldPrice };
+// }
