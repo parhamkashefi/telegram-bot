@@ -133,7 +133,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
   private goldPersianName(site: string): string {
     const map: Record<string, string> = {
       estjt: 'اتحادیه',
-      tabloTala: 'تابلو طلا',
+      tablotala: 'تابلو طلا',
       tabanGohar: 'تابان گوهر',
       talaIr: 'طلا ایران',
       kitco: 'کیتکو',

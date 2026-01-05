@@ -416,7 +416,7 @@ async getPriceFromKitco(): Promise<{ site: string; price: [number] }> {
       prices,
       globalSiteNames,
       globalPrices,
-      weights: [[1], [1], [1], [1], [1]],
+      weights: [[1], [1], [1], [1]],
       tomanPerDollar,
       average,
       tomanGlobalPrice,

@@ -16,7 +16,7 @@ export class Gold {
   prices: number[][];
 
   @Prop({ type: Array, default: [[]] })
-  weight: number[][];
+  weights: number[][];
 
   @Prop({ type: Array, default: [] })
   globalSiteNames: string[];
