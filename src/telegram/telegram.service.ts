@@ -44,7 +44,9 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       const chatId = msg.chat.id;
       this.bot.sendMessage(chatId, 'سلام! به ربات سوپرانو خوش آمدید:', {
         reply_markup: {
-          keyboard: [['قیمت لحظه‌ای طلا', 'قیمت لحظه‌ای نقره']],
+          keyboard: [
+            ['قیمت لحظه‌ای طلا', 'قیمت لحظه‌ای ساچمه نقره', 'قیمت لحظه‌ای شمش نقره'],
+          ],
           resize_keyboard: true,
         },
       });
@@ -57,9 +59,10 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       try {
         if (text === 'قیمت لحظه‌ای طلا') {
           await this.sendGoldPrice(chatId);
-        } else if (text === 'قیمت لحظه‌ای نقره') {
-          await this.sendCombinedPrices(chatId);
-          // await this.sendSilverPrice(chatId);
+        } else if (text === 'قیمت لحظه‌ای شمش نقره') {
+          await this.sendSilverBarPrice(chatId);
+        } else if (text === 'قیمت لحظه‌ای ساچمه نقره') {
+          await this.sendSilverBallPrice(chatId);
         }
       } catch (error) {
         console.error(' Error handling message:', error);
@@ -86,12 +89,32 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     await this.bot.sendMessage(chatId, goldMessage);
   }
 
-  private async sendSilverPrice(chatId: number | string) {
-    await this.bot.sendMessage(chatId, '⏳ در حال دریافت قیمت نقره...');
-    const prices = await Promise.all([
-      this.silverService.getAll999SilverPrices(),
-    ]);
-    await this.bot.sendMessage(chatId, prices);
+  private async sendSilverBarPrice(chatId: number | string) {
+    await this.bot.sendMessage(chatId, '⏳ در حال دریافت قیمت شمش نقره...');
+    const silverOPrice = await this.silverService.getAllSilverBarPrices();
+    const silverBarSiteNames = ['tokenikoBar', 'parsis', 'zioto', 'kitco'];
+    const silverMessage = await this.SilverBarTelegramMessage(
+      silverOPrice,
+      silverBarSiteNames,
+    );
+    await this.bot.sendMessage(chatId, silverMessage);
+  }
+
+  private async sendSilverBallPrice(chatId: number | string) {
+    await this.bot.sendMessage(chatId, '⏳ در حال دریافت قیمت ساچمه نقره...');
+    const silverOPrice = await this.silverService.getAll999SilverPrices();
+    const silverBallSiteNames = [
+      'noghra',
+      'tokeniko',
+      'silverin',
+      'noghresea',
+      'kitco',
+    ];
+    const silverMessage = await this.SilverBarTelegramMessage(
+      silverOPrice,
+      silverBallSiteNames,
+    );
+    await this.bot.sendMessage(chatId, silverMessage);
   }
 
   private initAutoPriceSender() {
@@ -170,7 +193,10 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     return numValue.toLocaleString('fa-IR');
   }
 
-  async SilverBarTelegramMessage(silver: SilverRo,siteNames: string[]): Promise<string> {
+  async SilverBarTelegramMessage(
+    silver: SilverRo,
+    siteNames: string[],
+  ): Promise<string> {
     let message = `📊 قیمت شمش نقره\n\n`;
 
     siteNames.forEach((site, i) => {
@@ -196,7 +222,10 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     return message;
   }
 
-  async Silver999TelegramMessage(silver: SilverRo,siteNames: string[]): Promise<string> {
+  async Silver999TelegramMessage(
+    silver: SilverRo,
+    siteNames: string[],
+  ): Promise<string> {
     let message = `📊 قیمت نقره عیار(۹۹۹)\n\n`;
     siteNames.forEach((site, i) => {
       message += `🌐 ${this.silverBallPersianName(site)}\n`;
@@ -219,7 +248,10 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     return message;
   }
 
-  async GoldTelegramMessage(gold: GoldRo,siteNames: string[]): Promise<string> {
+  async GoldTelegramMessage(
+    gold: GoldRo,
+    siteNames: string[],
+  ): Promise<string> {
     let message = `📊 قیمت طلا\n\n`;
 
     siteNames.forEach((site, i) => {
@@ -249,18 +281,15 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     console.log('🔄 Fetching combined prices...');
 
     try {
-      const [goldPrices, silverBallPrices,silverBarPrices] = await Promise.all([
-        this.goldService.getAllGoldPrices(),
-        this.silverService.getAll999SilverPrices(),
-        this.silverService.getAllSilverBarPrices(),
-      ]);
+      const [goldPrices, silverBallPrices, silverBarPrices] = await Promise.all(
+        [
+          this.goldService.getAllGoldPrices(),
+          this.silverService.getAll999SilverPrices(),
+          this.silverService.getAllSilverBarPrices(),
+        ],
+      );
 
-      const silverBarSiteNames =[
-        'tokenikoBar',
-        'parsis',
-        'zioto',
-        'kitco'
-      ]
+      const silverBarSiteNames = ['tokenikoBar', 'parsis', 'zioto', 'kitco'];
 
       const silverBallSiteNames = [
         'noghra',
@@ -269,6 +298,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         'noghresea',
         'kitco',
       ];
+
       const goldSiteNames = [
         'estjt',
         'tablotala',
@@ -291,7 +321,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         goldPrices,
         goldSiteNames,
       );
-      await this.bot.sendMessage(chatId,silverBarMessage)
+      await this.bot.sendMessage(chatId, silverBarMessage);
       await this.bot.sendMessage(chatId, silverBallMessage);
       await this.bot.sendMessage(chatId, goldMessage);
 
