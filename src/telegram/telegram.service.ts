@@ -20,18 +20,26 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     private readonly silverService: SilverService,
   ) {}
 
-  async onModuleInit() {
-    const token = this.configService.get<string>('BOT_TOKEN');
-    if (!token) throw new Error('❌ BOT_TOKEN not found in .env');
+async onModuleInit() {
+  const token = this.configService.get<string>('BOT_TOKEN');
+  if (!token) throw new Error('❌ BOT_TOKEN not found in .env');
 
-    this.bot = new TelegramBot(token, { polling: true });
-    this.groupChatId = this.configService.get<string>('GROUP_CHAT_ID') || '';
+  this.bot = new TelegramBot(token, { polling: true });
+  this.groupChatId = this.configService.get<string>('GROUP_CHAT_ID') || '';
 
-    this.initMenu();
-    this.initAutoPriceSender();
+  await this.bot.setMyCommands([
+    {
+      command: 'start',
+      description: 'شروع ربات',
+    },
+  ]);
 
-    console.log('🤖 Telegram bot initialized successfully');
-  }
+  this.initMenu();
+  this.initAutoPriceSender();
+
+  console.log('🤖 Telegram bot initialized successfully');
+}
+
 
   onModuleDestroy() {
     if (this.autoPriceInterval) clearInterval(this.autoPriceInterval);
@@ -45,7 +53,9 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       this.bot.sendMessage(chatId, 'سلام! به ربات سوپرانو خوش آمدید:', {
         reply_markup: {
           keyboard: [
-            ['قیمت لحظه‌ای طلا', 'قیمت لحظه‌ای ساچمه نقره', 'قیمت لحظه‌ای شمش نقره'],
+            ['قیمت لحظه‌ای طلا'],
+            ['قیمت لحظه‌ای ساچمه نقره'],
+            ['قیمت لحظه‌ای شمش نقره'],
           ],
           resize_keyboard: true,
         },
