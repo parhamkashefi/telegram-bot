@@ -11,11 +11,9 @@ export class Silver {
   @Prop({ type: Array, of: Number })
   siteNames: [string];
 
-  //Iranian prices (per gram / ball / etc.)
   @Prop({ type: Array, of: Number, default: [[]] })
   prices: number[][];
 
-  // Weight-based prices (bars, ounces)
   @Prop({ type: Array, default: [[]] })
   weights: number[][];
 
@@ -25,15 +23,12 @@ export class Silver {
   @Prop({ type: Array, of: Number, default: [] })
   globalPrices: number[];
 
-  //USD → Toman
   @Prop({ default: [] })
   tomanPerDollar: number;
 
-  //Global prices (Kitco, etc.)
   @Prop({ type: Array, of: Number, default: [] })
   dollarPrices: number[];
 
-  // Weight-based prices (bars, ounces)
   @Prop({ type: Number, default: 400000 })
   average: number;
 

@@ -11,7 +11,6 @@ export class Gold {
   @Prop({ type: Array })
   siteNames: string[];
 
-  //Iranian prices (per gram / ball / etc.)
   @Prop({ type: Array, default: [[]] })
   prices: number[][];
 
@@ -24,15 +23,12 @@ export class Gold {
   @Prop({ type: Array, default: [] })
   globalPrices: number[];
 
-  //USD → Toman
   @Prop({ default: [] })
   tomanPerDollar: number;
 
-  // Global prices (Kitco, etc.)
   @Prop({ type: Array })
   dollarPrices: number[];
 
-  // Weight-based prices (bars, ounces)
   @Prop({ type: Number, default: 400000 })
   average: number;
 
