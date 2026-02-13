@@ -1,5 +1,4 @@
 import { Module, forwardRef } from '@nestjs/common';
-import { TelegramController } from './telegram.controller';
 import { TelegramService } from './telegram.service';
 import { GoldModule } from '../gold/gold.module';
 import { SilverModule } from '../silver/silver.module';
@@ -11,7 +10,7 @@ import { UsdToIrrModule } from '../usdToIrr/usdToIrr.module';
     forwardRef(() => SilverModule),
     forwardRef(() => UsdToIrrModule),
   ],
-  controllers: [TelegramController],
+  controllers: [],
   providers: [TelegramService],
   exports: [TelegramService],
 })
