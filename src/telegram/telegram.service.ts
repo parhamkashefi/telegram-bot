@@ -20,26 +20,25 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     private readonly silverService: SilverService,
   ) {}
 
-async onModuleInit() {
-  const token = this.configService.get<string>('BOT_TOKEN');
-  if (!token) throw new Error('❌ BOT_TOKEN not found in .env');
+  async onModuleInit() {
+    const token = this.configService.get<string>('BOT_TOKEN');
+    if (!token) throw new Error('❌ BOT_TOKEN not found in .env');
 
-  this.bot = new TelegramBot(token, { polling: true });
-  this.groupChatId = this.configService.get<string>('GROUP_CHAT_ID') || '';
+    this.bot = new TelegramBot(token, { polling: true });
+    this.groupChatId = this.configService.get<string>('GROUP_CHAT_ID') || '';
 
-  await this.bot.setMyCommands([
-    {
-      command: 'start',
-      description: 'شروع ربات',
-    },
-  ]);
+    await this.bot.setMyCommands([
+      {
+        command: 'start',
+        description: 'شروع ربات',
+      },
+    ]);
 
-  this.initMenu();
-  this.initAutoPriceSender();
+    this.initMenu();
+    this.initAutoPriceSender();
 
-  console.log('🤖 Telegram bot initialized successfully');
-}
-
+    console.log('🤖 Telegram bot initialized successfully');
+  }
 
   onModuleDestroy() {
     if (this.autoPriceInterval) clearInterval(this.autoPriceInterval);
@@ -101,10 +100,10 @@ async onModuleInit() {
 
   private async sendSilverBarPrice(chatId: number | string) {
     await this.bot.sendMessage(chatId, '⏳ در حال دریافت قیمت شمش نقره...');
-    const silverOPrice = await this.silverService.getAllSilverBarPrices();
+    const silverPrice = await this.silverService.getAllSilverBarPrices();
     const silverBarSiteNames = ['tokenikoBar', 'parsis', 'zioto', 'kitco'];
     const silverMessage = await this.SilverBarTelegramMessage(
-      silverOPrice,
+      silverPrice,
       silverBarSiteNames,
     );
     await this.bot.sendMessage(chatId, silverMessage);
@@ -112,7 +111,7 @@ async onModuleInit() {
 
   private async sendSilverBallPrice(chatId: number | string) {
     await this.bot.sendMessage(chatId, '⏳ در حال دریافت قیمت ساچمه نقره...');
-    const silverOPrice = await this.silverService.getAll999SilverPrices();
+    const silverPrice = await this.silverService.getAll999SilverPrices();
     const silverBallSiteNames = [
       'noghra',
       'tokeniko',
@@ -121,7 +120,7 @@ async onModuleInit() {
       'kitco',
     ];
     const silverMessage = await this.SilverBarTelegramMessage(
-      silverOPrice,
+      silverPrice,
       silverBallSiteNames,
     );
     await this.bot.sendMessage(chatId, silverMessage);
@@ -225,7 +224,6 @@ async onModuleInit() {
       message += '\n';
     });
 
-    message += `$ نرخ نقره جهانی: ${this.toPersianNumber(silver.tomanGlobalPrice)} تومان\n`;
     message += `💱 نرخ دلار: ${this.toPersianNumber(silver.tomanPerDollar)} تومان\n`;
     message += `🕒 آخرین بروزرسانی: ${moment(silver.createdAt).format('jYYYY/jMM/jDD HH:mm')}`;
 
