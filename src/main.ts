@@ -3,7 +3,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-=  process.on('unhandledRejection', (reason, promise) => {
+  process.on('unhandledRejection', (reason, promise) => {
     console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
   });
 
@@ -13,7 +13,7 @@ async function bootstrap() {
       process.env.FRONTEND_URL || 'http://localhost:3001',
       process.env.MAIN_BACKEND_URL || 'http://localhost:8000',
       'http://localhost:3000',
-      'http://localhost:3001', 
+      'http://localhost:3001',
     ],
     credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
