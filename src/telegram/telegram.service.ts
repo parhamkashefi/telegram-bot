@@ -224,7 +224,6 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       message += '\n';
     });
 
-    message += `💱 نرخ دلار: ${this.toPersianNumber(silver.tomanPerDollar)} تومان\n`;
     message += `🕒 آخرین بروزرسانی: ${moment(silver.createdAt).format('jYYYY/jMM/jDD HH:mm')}`;
 
     return message;
