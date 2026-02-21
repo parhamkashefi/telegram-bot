@@ -14,7 +14,7 @@ import { SilverRo } from './dto/silver.ro';
 export class SilverController {
   constructor(private readonly silverService: SilverService) {}
 
-  @Get('public')
+  @Get('silver/ball/prices/public')
   @ApiOperation({
     summary: 'Get last saved silver ball price (public, no auth required)',
   })
@@ -35,7 +35,7 @@ export class SilverController {
     return silverPrice;
   }
 
-  @Get()
+  @Get('silver/ball/price')
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()
   @ApiOperation({
@@ -54,7 +54,7 @@ export class SilverController {
     return await this.silverService.getPreviousSilverBallFromDB();
   }
 
-  @Get('public')
+  @Get('silver/bar/prices/public')
   @ApiOperation({
     summary: 'Get last saved silver bar price (public, no auth required)',
   })
@@ -75,7 +75,7 @@ export class SilverController {
     return silverPrice;
   }
 
-  @Get()
+  @Get('silver/bar/price')
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()
   @ApiOperation({
