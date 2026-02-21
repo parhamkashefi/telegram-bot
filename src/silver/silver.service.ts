@@ -852,7 +852,7 @@ export class SilverService {
   async getPreviousSilverBarFromDB(): Promise<SilverDocument | null> {
     try {
       const previous = await this.silverModel
-        .find({ productType: 'bar' })
+        .find({ productType: 'Bar' })
         .sort({ createdAt: -1 })
         .skip(1)
         .limit(1)
