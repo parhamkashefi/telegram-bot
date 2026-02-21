@@ -420,9 +420,13 @@ export class SilverService {
       // More specific error logging
       if (error.name === 'TimeoutError') {
         if (error.message.includes('Navigation timeout')) {
-          console.error('❌ Silverin: Page navigation timeout (page not loading)');
+          console.error(
+            '❌ Silverin: Page navigation timeout (page not loading)',
+          );
         } else {
-          console.error('❌ Silverin: Element wait timeout (element not found)');
+          console.error(
+            '❌ Silverin: Element wait timeout (element not found)',
+          );
         }
       } else {
         console.error('Error fetching Silverin price:', error);
@@ -477,7 +481,7 @@ export class SilverService {
 
       const rawPrice = Number(data?.price); // "368.28"
       const finalPrice = Number.isFinite(rawPrice)
-        ? Math.round(rawPrice * 1000) 
+        ? Math.round(rawPrice * 1000)
         : 0;
 
       console.log('silver noghresea:', {
@@ -493,7 +497,9 @@ export class SilverService {
       // More specific error logging
       if (error.name === 'TimeoutError') {
         if (error.message.includes('Navigation timeout')) {
-          console.error('❌ Noghresea: Page navigation timeout (page not loading)');
+          console.error(
+            '❌ Noghresea: Page navigation timeout (page not loading)',
+          );
         } else {
           console.error('❌ Noghresea: Element/API timeout');
         }
@@ -557,7 +563,11 @@ export class SilverService {
   //bars
 
   // 🔸 Site 1 - tokeniko.com silver bars
-  async getTokenikoSilverBars(): Promise<{site: string;weight: [number];price: [number];}> {
+  async getTokenikoSilverBars(): Promise<{
+    site: string;
+    weight: [number];
+    price: [number];
+  }> {
     let browser: Browser | null = null;
 
     try {
@@ -650,7 +660,11 @@ export class SilverService {
   }
 
   // 🔸 Site 2 - parsisgold.com silver bars
-  async getParsisSilverBars(): Promise<{site: string;weight: [number];price: [number];}> {
+  async getParsisSilverBars(): Promise<{
+    site: string;
+    weight: [number];
+    price: [number];
+  }> {
     let browser: Browser | null = null;
 
     try {
@@ -699,11 +713,11 @@ export class SilverService {
       const english = this.toEnglishDigits(cleaned);
       const numericPrice = Number(english.replace(/,/g, ''));
 
-      console.log("parsis bar : ",{
+      console.log('parsis bar : ', {
         site: 'parsis',
         weight: [1000],
         price: isNaN(numericPrice) ? [0] : [numericPrice],
-      })
+      });
 
       return {
         site: 'parsis',
@@ -723,7 +737,11 @@ export class SilverService {
   }
 
   // 🔸 Site 3 - zioto silver bars
-  async getZiotoSilverBars(): Promise<{site: string;weight: [number];price: [number];}> {
+  async getZiotoSilverBars(): Promise<{
+    site: string;
+    weight: [number];
+    price: [number];
+  }> {
     let browser: Browser | null = null;
 
     try {
@@ -792,11 +810,11 @@ export class SilverService {
 
         prices.push(isNaN(numericPrice) ? 0 : numericPrice);
       }
-      console.log("zioto bar : ",{
+      console.log('zioto bar : ', {
         site: 'zioto',
         weight: weights,
         price: prices,
-      })
+      });
 
       return {
         site: 'zioto',
@@ -815,29 +833,10 @@ export class SilverService {
     }
   }
 
-  async getNewestSilverFromDB(): Promise<SilverRo | null> {
-    try {
-      const newest = await this.silverModel
-        .findOne()
-        .sort({ createdAt: -1 })
-        .lean()
-        .exec();
-
-      if (!newest) return null;
-
-      return plainToInstance(SilverRo, newest, {
-        excludeExtraneousValues: true,
-      });
-    } catch (error) {
-      console.error('❌ Error getting newest silver from DB:', error);
-      return null;
-    }
-  }
-
-  async getPreviousSilverFromDB(): Promise<SilverDocument | null> {
+  async getPreviousSilverBallFromDB(): Promise<SilverDocument | null> {
     try {
       const previous = await this.silverModel
-        .find({ productMaterial: 'silver' })
+        .find({ productMaterial: 'silver', productType: 'ball999' })
         .sort({ createdAt: -1 })
         .skip(1)
         .limit(1)
@@ -850,7 +849,33 @@ export class SilverService {
     }
   }
 
-  async createSilver(silverDto: SilverDto): Promise<SilverRo> {
+  async getPreviousSilverBarFromDB(): Promise<SilverDocument | null> {
+    try {
+      const previous = await this.silverModel
+        .find({ productMaterial: 'silver', productType: 'ball' })
+        .sort({ createdAt: -1 })
+        .skip(1)
+        .limit(1)
+        .exec();
+
+      return previous[0] || null;
+    } catch (error) {
+      console.error('❌ Error fetching previous silver from DB:', error);
+      return null;
+    }
+  }
+
+  async createSilverBall(silverDto: SilverDto): Promise<SilverRo> {
+    const silver = await this.silverModel.create(silverDto);
+
+    console.log('silver saved in db');
+
+    return plainToInstance(SilverRo, silver, {
+      excludeExtraneousValues: true,
+    });
+  }
+
+  async createSilverBar(silverDto: SilverDto): Promise<SilverRo> {
     const silver = await this.silverModel.create(silverDto);
 
     console.log('silver saved in db');
@@ -935,13 +960,15 @@ export class SilverService {
 
     const globalPrices = [kitco.price];
     const globalSiteNames = [kitco.site];
-    
+
     // Fix: Only calculate bubble if average is valid (not NaN, not 0)
     let bubble = 0;
     if (average > 0 && !isNaN(average) && tomanGlobalPrice > 0) {
       bubble = ((average - tomanGlobalPrice) / average) * 100;
     } else {
-      console.warn('⚠️ Cannot calculate bubble: average or tomanGlobalPrice is invalid');
+      console.warn(
+        '⚠️ Cannot calculate bubble: average or tomanGlobalPrice is invalid',
+      );
     }
 
     // Fix: Validate values before saving to avoid MongoDB validation errors
@@ -961,7 +988,7 @@ export class SilverService {
       bubble: finalBubble,
     };
 
-    const silver = await this.createSilver(silverDto);
+    const silver = await this.createSilverBall(silverDto);
     return silver;
   }
 
@@ -991,7 +1018,7 @@ export class SilverService {
       tomanPerDollar: tomanPerDollar,
     };
 
-    const silver = await this.createSilver(silverDto);
+    const silver = await this.createSilverBar(silverDto);
     return silver;
   }
 }

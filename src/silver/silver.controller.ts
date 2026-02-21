@@ -15,20 +15,22 @@ export class SilverController {
   constructor(private readonly silverService: SilverService) {}
 
   @Get('public')
-  @ApiOperation({ summary: 'Get last saved silver price (public, no auth required)' })
+  @ApiOperation({
+    summary: 'Get last saved silver ball price (public, no auth required)',
+  })
   @ApiResponse({
     status: 200,
-    description: 'Returns the latest silver price',
+    description: 'Returns the latest silver ball price',
     type: SilverRo,
   })
   @ApiResponse({
     status: 404,
-    description: 'No silver price records found',
+    description: 'No silver ball price records found',
   })
-  async getLatestSilverPricePublic() {
-    const silverPrice = await this.silverService.getNewestSilverFromDB();
+  async getLatestSilverBallPricePublic() {
+    const silverPrice = await this.silverService.getPreviousSilverBallFromDB();
     if (!silverPrice) {
-      throw new NotFoundException('No silver price records found');
+      throw new NotFoundException('No silver ball price records found');
     }
     return silverPrice;
   }
@@ -36,17 +38,59 @@ export class SilverController {
   @Get()
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get last saved silver price' })
+  @ApiOperation({
+    summary: 'Get latest silver ball price (requires authentication)',
+  })
   @ApiResponse({
     status: 200,
-    description: 'Returns the latest silver price',
+    description: 'Returns the latest silver ball price',
     type: SilverRo,
   })
   @ApiResponse({
     status: 404,
-    description: 'No silver price records found',
+    description: 'No silver ball price records found',
   })
-  async getLatestSilverPrice() {
-    return await this.silverService.getNewestSilverFromDB();
+  async getLatestSilverBallPrice() {
+    return await this.silverService.getPreviousSilverBallFromDB();
+  }
+
+  @Get('public')
+  @ApiOperation({
+    summary: 'Get last saved silver bar price (public, no auth required)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns the latest silver bar price',
+    type: SilverRo,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'No silver bar price records found',
+  })
+  async getLatestSilverBarPricePublic() {
+    const silverPrice = await this.silverService.getPreviousSilverBarFromDB();
+    if (!silverPrice) {
+      throw new NotFoundException('No silver bar price records found');
+    }
+    return silverPrice;
+  }
+
+  @Get()
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Get latest silver bar price (requires authentication)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns the latest silver bar price',
+    type: SilverRo,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'No silver bar price records found',
+  })
+  async getLatestSilverBarPrice() {
+    return await this.silverService.getPreviousSilverBarFromDB();
   }
 }
