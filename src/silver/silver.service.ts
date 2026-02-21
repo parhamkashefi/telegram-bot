@@ -833,26 +833,26 @@ export class SilverService {
     }
   }
 
-async getPreviousSilverBallFromDB(): Promise<SilverDocument | null> {
-  try {
-    const previous = await this.silverModel
-      .find({ productType: 'ball999' })  // Only filter by productType
-      .sort({ createdAt: -1 })
-      .skip(1)
-      .limit(1)
-      .exec();
+  async getPreviousSilverBallFromDB(): Promise<SilverDocument | null> {
+    try {
+      const previous = await this.silverModel
+        .find({ productType: 'ball999' }) // Only filter by productType
+        .sort({ createdAt: -1 })
+        .skip(1)
+        .limit(1)
+        .exec();
 
-    return previous[0] || null;
-  } catch (error) {
-    console.error('❌ Error fetching previous silver ball from DB:', error);
-    return null;
+      return previous[0] || null;
+    } catch (error) {
+      console.error('❌ Error fetching previous silver ball from DB:', error);
+      return null;
+    }
   }
-}
 
   async getPreviousSilverBarFromDB(): Promise<SilverDocument | null> {
     try {
       const previous = await this.silverModel
-        .find({ productType: 'ball' })
+        .find({ productType: 'bar' })
         .sort({ createdAt: -1 })
         .skip(1)
         .limit(1)
