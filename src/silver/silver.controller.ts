@@ -28,7 +28,7 @@ export class SilverController {
     description: 'No silver ball price records found',
   })
   async getLatestSilverBallPricePublic() {
-    const silverPrice = await this.silverService.getPreviousSilverBallFromDB();
+    const silverPrice = await this.silverService.getNewestSilverBallFromDB();
     if (!silverPrice) {
       throw new NotFoundException('No silver ball price records found');
     }
@@ -68,7 +68,7 @@ export class SilverController {
     description: 'No silver bar price records found',
   })
   async getLatestSilverBarPricePublic() {
-    const silverPrice = await this.silverService.getPreviousSilverBarFromDB();
+    const silverPrice = await this.silverService.getNewestSilverBarFromDB();
     if (!silverPrice) {
       throw new NotFoundException('No silver bar price records found');
     }

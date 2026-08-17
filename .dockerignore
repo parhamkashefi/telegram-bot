@@ -6,8 +6,6 @@ npm-debug.log*
 .env
 .eslintrc.js
 .prettierrc
-tsconfig.json
-tsconfig.build.json
 dist
 .nyc_output
 coverage

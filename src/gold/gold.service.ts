@@ -46,6 +46,27 @@ export class GoldService {
       .replace(/[٠-٩]/g, (d) => String(arabicDigits.indexOf(d)));
   }
 
+  private readonly talaBrowserHeaders = {
+    'User-Agent':
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    Accept: 'text/html,application/xhtml+xml',
+  };
+
+  /** Parse tala.ir price text (Persian digits, commas) into integer Toman. */
+  private parseTalaTomanPrice(raw: string): number {
+    const ascii = this.toEnglishDigits(raw.trim());
+    const digitsOnly = ascii.replace(/[^\d]/g, '');
+    const value = Number(digitsOnly);
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  }
+
+  /** Parse tala.ir ounce price (may include decimals) into USD per ounce. */
+  private parseTalaOunceUsd(raw: string): number {
+    const ascii = this.toEnglishDigits(raw.trim()).replace(/[^\d.]/g, '');
+    const value = Number.parseFloat(ascii);
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  }
+
   getIranTime(): string {
     const now = moment().tz('Asia/Tehran');
     const gYear = now.year();
@@ -235,38 +256,56 @@ export class GoldService {
     }
   }
 
-  // 🔸 Site 4 - tala.ir
+  // 🔸 Site 4 - tala.ir (18k gram) — same approach as silver-project
   async getPriceFromTalaIr(): Promise<{ site: string; prices: [number] }> {
     try {
-      const { data } = await axios.get('https://www.tala.ir/', {
-        timeout: 30000,
+      const { data } = await axios.get('https://www.tala.ir/price/18k', {
+        timeout: 20000,
+        headers: this.talaBrowserHeaders,
       });
 
       const $ = cheerio.load(data);
+      const rawText = $('h3.bg-green-light').first().text().trim();
+      const price = this.parseTalaTomanPrice(rawText);
 
-      const row = $('tr.gold_18k');
-      const rawText = row.find('td.value').text().trim();
-
-      if (!rawText) {
-        return { site: 'tala.ir', prices: [0] };
-      }
-
-      const cleaned = this.toEnglishDigits(rawText).replace(/[^\d]/g, '');
-      const price = cleaned ? Number(cleaned) : null;
-      console.log('gold talaIR', {
-        site: 'tala.ir',
-        prices: [price && !isNaN(price) ? price : 0],
-      });
+      console.log('gold tala.ir 18k', { site: 'tala.ir', prices: [price] });
 
       return {
-        site: 'tala',
-        prices: [price && !isNaN(price) ? price : 0],
+        site: 'tala.ir',
+        prices: [price],
       };
     } catch (error) {
-      console.error('Error fetching price from tala.ir:', error);
+      console.error('Error fetching 18k price from tala.ir:', error);
       return {
-        site: 'tala',
+        site: 'tala.ir',
         prices: [0],
+      };
+    }
+  }
+
+  /** Global ounce (USD) from tala.ir — used for قیمت طلا در بازارهای جهانی */
+  async getOunceFromTalaIr(): Promise<{ site: string; price: [number] }> {
+    try {
+      const { data } = await axios.get('https://www.tala.ir/price/ounce', {
+        timeout: 20000,
+        headers: this.talaBrowserHeaders,
+      });
+
+      const $ = cheerio.load(data);
+      const rawText = $('h3.bg-green-light').first().text().trim();
+      const price = this.parseTalaOunceUsd(rawText);
+
+      console.log('gold tala.ir ounce', { site: 'tala.ir', price: [price] });
+
+      return {
+        site: 'tala.ir',
+        price: [price],
+      };
+    } catch (error) {
+      console.error('Error fetching ounce price from tala.ir:', error);
+      return {
+        site: 'tala.ir',
+        price: [0],
       };
     }
   }
@@ -364,18 +403,45 @@ export class GoldService {
   }
 
   async getAllGoldPrices(): Promise<GoldRo> {
-    const [estjt, tabloTala, tabanGohar, talaIr, kitco] = await Promise.all([
-      this.getPriceFromEstjt(),
-      this.getPriceFromTabloTala(),
-      this.getPriceFromTabanGohar(),
-      this.getPriceFromTalaIr(),
-      this.getPriceFromKitco(),
-    ]);
+    const [estjt, tabloTala, tabanGohar, talaIr, talaOunce, kitco] =
+      await Promise.all([
+        this.getPriceFromEstjt(),
+        this.getPriceFromTabloTala(),
+        this.getPriceFromTabanGohar(),
+        this.getPriceFromTalaIr(),
+        this.getOunceFromTalaIr(),
+        this.getPriceFromKitco(),
+      ]);
 
     const tomanPerDollar = await this.usdToIrrService.getTomanPerDollar();
-    const kitcoPrice = Number(kitco.price) || 0;
-    const tomanGlobalPrice = Math.floor(kitcoPrice * tomanPerDollar);
-    console.log('tomanGlobalPrice : ', tomanGlobalPrice);
+    const ounceUsd = Number(talaOunce.price[0]) || 0;
+    const kitcoGramUsd = Number(kitco.price[0]) || 0;
+
+    // Prefer tala.ir global ounce; fall back to Kitco per-gram when ounce unavailable
+    const globalOunceUsd = ounceUsd > 0 ? ounceUsd : 0;
+    const globalSiteNames =
+      globalOunceUsd > 0 ? [talaOunce.site] : kitcoGramUsd > 0 ? [kitco.site] : [];
+    const globalPrices: [number][] =
+      globalOunceUsd > 0
+        ? [talaOunce.price]
+        : kitcoGramUsd > 0
+          ? [kitco.price]
+          : [[0]];
+
+    // Global display (تومان / گرم ۱۸ عیار): (اونس × دلار ÷ ۳۱.۱۰۳۴۷۶۸) × ۰.۷۵
+    const TROY_OUNCE_GRAMS = 31.1034768;
+    const GOLD_18K_PURITY = 0.75;
+    const tomanGlobalPrice =
+      globalOunceUsd > 0 && tomanPerDollar > 0
+        ? Math.floor(
+            ((globalOunceUsd * tomanPerDollar) / TROY_OUNCE_GRAMS) *
+              GOLD_18K_PURITY,
+          )
+        : kitcoGramUsd > 0 && tomanPerDollar > 0
+          ? Math.floor(kitcoGramUsd * tomanPerDollar)
+          : 0;
+
+    console.log('tomanGlobalPrice (gram 18k): ', tomanGlobalPrice);
 
     const prices = [
       estjt.prices,
@@ -407,8 +473,8 @@ export class GoldService {
       console.warn('⚠️ All silver prices are 0, cannot calculate average');
     }
 
-    const globalPrices = [kitco.price];
-    const globalSiteNames = [kitco.site];
+    const globalPricesForDto = globalPrices;
+    const globalSiteNamesForDto = globalSiteNames;
 
     let bubble = 0;
     if (average > 0 && !isNaN(average) && tomanGlobalPrice > 0) {
@@ -426,8 +492,8 @@ export class GoldService {
       productType: 'gold',
       siteNames,
       prices,
-      globalSiteNames,
-      globalPrices,
+      globalSiteNames: globalSiteNamesForDto,
+      globalPrices: globalPricesForDto,
       weights: [[1], [1], [1], [1]],
       tomanPerDollar,
       average: finalAverage,

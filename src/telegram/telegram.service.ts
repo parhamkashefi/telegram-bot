@@ -10,9 +10,9 @@ moment.loadPersian({ dialect: 'persian-modern' });
 
 @Injectable()
 export class TelegramService implements OnModuleInit, OnModuleDestroy {
-  private bot: TelegramBot;
+  private bot: TelegramBot | null = null;
   private groupChatId: string;
-  private autoPriceInterval: NodeJS.Timeout | null = null;
+  private enabled = false;
 
   constructor(
     private readonly configService: ConfigService,
@@ -20,12 +20,22 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     private readonly silverService: SilverService,
   ) {}
 
+  isEnabled(): boolean {
+    return this.enabled && this.bot !== null;
+  }
+
   async onModuleInit() {
-    const token = this.configService.get<string>('BOT_TOKEN');
-    if (!token) throw new Error('❌ BOT_TOKEN not found in .env');
+    const token = this.configService.get<string>('BOT_TOKEN')?.trim();
+    if (!token) {
+      console.warn(
+        '⚠️ BOT_TOKEN not set — Telegram bot disabled. Price crawl/API still run for the website.',
+      );
+      return;
+    }
 
     this.bot = new TelegramBot(token, { polling: true });
     this.groupChatId = this.configService.get<string>('GROUP_CHAT_ID') || '';
+    this.enabled = true;
 
     await this.bot.setMyCommands([
       {
@@ -35,21 +45,31 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     ]);
 
     this.initMenu();
-    this.initAutoPriceSender();
+
+    if (!this.groupChatId) {
+      console.warn(
+        '⚠️ GROUP_CHAT_ID not set — group auto-posts disabled (crawl still runs)',
+      );
+    }
 
     console.log('🤖 Telegram bot initialized successfully');
   }
 
   onModuleDestroy() {
-    if (this.autoPriceInterval) clearInterval(this.autoPriceInterval);
-    if (this.bot) this.bot.stopPolling();
+    if (this.bot) {
+      this.bot.stopPolling();
+      this.bot = null;
+    }
+    this.enabled = false;
     console.log('🛑 Telegram bot stopped');
   }
 
   private initMenu() {
+    if (!this.bot) return;
+
     this.bot.onText(/\/start/, (msg) => {
       const chatId = msg.chat.id;
-      this.bot.sendMessage(chatId, 'سلام! به ربات سوپرانو خوش آمدید:', {
+      this.bot!.sendMessage(chatId, 'سلام! به ربات سوپرانو خوش آمدید:', {
         reply_markup: {
           keyboard: [
             ['قیمت لحظه‌ای طلا'],
@@ -75,12 +95,13 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         }
       } catch (error) {
         console.error(' Error handling message:', error);
-        this.bot.sendMessage(chatId, 'خطایی رخ داد، لطفاً دوباره تلاش کنید.');
+        this.bot?.sendMessage(chatId, 'خطایی رخ داد، لطفاً دوباره تلاش کنید.');
       }
     });
   }
 
   private async sendGoldPrice(chatId: number | string) {
+    if (!this.bot) return;
     await this.bot.sendMessage(chatId, '⏳ در حال دریافت قیمت طلا...');
 
     const goldPrices = await this.goldService.getAllGoldPrices();
@@ -99,6 +120,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async sendSilverBarPrice(chatId: number | string) {
+    if (!this.bot) return;
     await this.bot.sendMessage(chatId, '⏳ در حال دریافت قیمت شمش نقره...');
     const silverPrice = await this.silverService.getAllSilverBarPrices();
     const silverBarSiteNames = ['tokenikoBar', 'parsis', 'zioto', 'kitco'];
@@ -110,6 +132,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async sendSilverBallPrice(chatId: number | string) {
+    if (!this.bot) return;
     await this.bot.sendMessage(chatId, '⏳ در حال دریافت قیمت ساچمه نقره...');
     const silverPrice = await this.silverService.getAll999SilverPrices();
     const silverBallSiteNames = [
@@ -124,28 +147,6 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       silverBallSiteNames,
     );
     await this.bot.sendMessage(chatId, silverMessage);
-  }
-
-  private initAutoPriceSender() {
-    if (!this.groupChatId) {
-      console.warn('⚠️ GROUP_CHAT_ID not set in .env — auto sender disabled');
-      return;
-    }
-
-    console.log('🚀 Auto price sender started (every 30 minutes)');
-
-    // Send once after startup (wait 10s for bot readiness)
-    setTimeout(() => {
-      this.sendCombinedPrices(this.groupChatId);
-    }, 10_000);
-
-    // Schedule every 30 minutes
-    this.autoPriceInterval = setInterval(
-      () => {
-        this.sendCombinedPrices(this.groupChatId);
-      },
-      30 * 60 * 1000,
-    ); // 30 minutes
   }
 
   private silverBallPersianName(site: string): string {
@@ -190,15 +191,12 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       return '۰';
     }
 
-    // Convert to number if it's a string
     const numValue = typeof value === 'string' ? Number(value) : value;
 
-    // Check if it's a valid number
     if (isNaN(numValue)) {
       return '۰';
     }
 
-    // Now safely call toLocaleString
     return numValue.toLocaleString('fa-IR');
   }
 
@@ -264,7 +262,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     siteNames.forEach((site, i) => {
       message += `🌐 ${this.goldPersianName(site)}\n`;
 
-      const prices = gold.prices[i] || [];
+      const prices = gold.prices?.[i] || [];
       const weights = gold.weights?.[i] || [];
 
       weights.forEach((weight, j) => {
@@ -284,6 +282,50 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     return message;
   }
 
+  /** Post already-crawled snapshots to a chat (used by PriceRefreshService). */
+  async sendCrawledPricesToChat(
+    chatId: string | number,
+    goldPrices: GoldRo,
+    silverBallPrices: SilverRo,
+    silverBarPrices: SilverRo,
+  ): Promise<void> {
+    if (!this.bot) return;
+
+    const silverBarSiteNames = ['tokenikoBar', 'parsis', 'zioto', 'kitco'];
+    const silverBallSiteNames = [
+      'noghra',
+      'tokeniko',
+      'silverin',
+      'noghresea',
+      'kitco',
+    ];
+    const goldSiteNames = [
+      'estjt',
+      'tablotala',
+      'tabanGohar',
+      'talaIr',
+      'kitco',
+    ];
+
+    const silverBarMessage = await this.SilverBarTelegramMessage(
+      silverBarPrices,
+      silverBarSiteNames,
+    );
+    const silverBallMessage = await this.Silver999TelegramMessage(
+      silverBallPrices,
+      silverBallSiteNames,
+    );
+    const goldMessage = await this.GoldTelegramMessage(
+      goldPrices,
+      goldSiteNames,
+    );
+
+    await this.bot.sendMessage(chatId, silverBarMessage);
+    await this.bot.sendMessage(chatId, silverBallMessage);
+    await this.bot.sendMessage(chatId, goldMessage);
+    console.log('✅ Combined prices sent to Telegram');
+  }
+
   async sendCombinedPrices(chatId): Promise<any> {
     console.log('🔄 Fetching combined prices...');
 
@@ -296,48 +338,15 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         ],
       );
 
-      const silverBarSiteNames = ['tokenikoBar', 'parsis', 'zioto', 'kitco'];
-
-      const silverBallSiteNames = [
-        'noghra',
-        'tokeniko',
-        'silverin',
-        'noghresea',
-        'kitco',
-      ];
-
-      const goldSiteNames = [
-        'estjt',
-        'tablotala',
-        'tabanGohar',
-        'talaIr',
-        'kitco',
-      ];
-
-      const silverBarMessage = await this.SilverBarTelegramMessage(
-        silverBarPrices,
-        silverBarSiteNames,
-      );
-
-      const silverBallMessage = await this.Silver999TelegramMessage(
-        silverBallPrices,
-        silverBallSiteNames,
-      );
-
-      const goldMessage = await this.GoldTelegramMessage(
+      await this.sendCrawledPricesToChat(
+        chatId,
         goldPrices,
-        goldSiteNames,
+        silverBallPrices,
+        silverBarPrices,
       );
-      await this.bot.sendMessage(chatId, silverBarMessage);
-      await this.bot.sendMessage(chatId, silverBallMessage);
-      await this.bot.sendMessage(chatId, goldMessage);
-
-      console.log('✅ Combined prices sent to Telegram');
     } catch (error) {
       console.error('❌ Error in sendCombinedPrices:', error);
-      // Optionally send an error message to the user
-      // await this.bot.sendMessage(chatId, '❌ خطا در دریافت قیمت‌ها');
-      throw error; // Re-throw if you want the caller to handle it
+      throw error;
     }
   }
 }

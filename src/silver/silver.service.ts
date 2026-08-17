@@ -50,6 +50,21 @@ export class SilverService {
     return number.toLocaleString('en-US');
   }
 
+  private readonly talaBrowserHeaders = {
+    'User-Agent':
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    Accept: 'text/html,application/xhtml+xml',
+  };
+
+  private parseTalaOunceUsd(raw: string): number {
+    // Homepage uses slash as decimal (۵۶/۸۸); detail pages use dot (۴۷.۹۹)
+    const ascii = this.toEnglishDigits(raw.trim())
+      .replace(/\//g, '.')
+      .replace(/[^\d.]/g, '');
+    const value = Number.parseFloat(ascii);
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  }
+
   getIranTime(): string {
     const now = moment().tz('Asia/Tehran');
     const gYear = now.year();
@@ -560,6 +575,73 @@ export class SilverService {
     }
   }
 
+  /**
+   * Global silver ounce (USD) from tala.ir homepage box نقره(اونس).
+   * Live value comes from /banner/ (same feed as the homepage screenshot),
+   * not /price/silver which is often stale.
+   */
+  async getOunceFromTalaIr(): Promise<{ site: string; price: [number] }> {
+    let browser: Browser | null = null;
+    try {
+      browser = await puppeteer.launch({
+        ...this.browserConfig,
+        executablePath:
+          process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser',
+      });
+      const page = await browser.newPage();
+      await page.setUserAgent(this.talaBrowserHeaders['User-Agent']);
+      await page.goto('https://www.tala.ir/', {
+        waitUntil: 'domcontentloaded',
+        timeout: 60000,
+      });
+
+      const rawText = await page.evaluate(async () => {
+        const url =
+          'https://www.tala.ir/banner/?rnd=' +
+          Date.now() +
+          '&ids=1001,&is-mobile=0&android=0&ios=0&rnd=1263&h=1080&w=1920';
+        const res = await fetch(url);
+        const data = (await res.json()) as {
+          price?: { silver?: string };
+        };
+        return data?.price?.silver?.trim() || '';
+      });
+
+      let price = this.parseTalaOunceUsd(rawText);
+
+      // Fallback: detail page (may be delayed vs homepage)
+      if (price <= 0) {
+        const { data } = await axios.get('https://www.tala.ir/price/silver', {
+          timeout: 20000,
+          headers: this.talaBrowserHeaders,
+        });
+        const $ = cheerio.load(data);
+        price = this.parseTalaOunceUsd(
+          $('h3.bg-green-light').first().text().trim(),
+        );
+      }
+
+      console.log('silver tala.ir ounce', {
+        site: 'tala.ir',
+        raw: rawText,
+        price: [price],
+      });
+
+      return {
+        site: 'tala.ir',
+        price: [price],
+      };
+    } catch (error) {
+      console.error('Error fetching silver ounce from tala.ir:', error);
+      return {
+        site: 'tala.ir',
+        price: [0],
+      };
+    } finally {
+      await this.safeCloseBrowser(browser);
+    }
+  }
+
   //bars
 
   // 🔸 Site 1 - tokeniko.com silver bars
@@ -833,6 +915,18 @@ export class SilverService {
     }
   }
 
+  async getNewestSilverBallFromDB(): Promise<SilverDocument | null> {
+    try {
+      return await this.silverModel
+        .findOne({ productType: 'ball999' })
+        .sort({ createdAt: -1 })
+        .exec();
+    } catch (error) {
+      console.error('❌ Error fetching newest silver ball from DB:', error);
+      return null;
+    }
+  }
+
   async getPreviousSilverBallFromDB(): Promise<SilverDocument | null> {
     try {
       const previous = await this.silverModel
@@ -845,6 +939,18 @@ export class SilverService {
       return previous[0] || null;
     } catch (error) {
       console.error('❌ Error fetching previous silver ball from DB:', error);
+      return null;
+    }
+  }
+
+  async getNewestSilverBarFromDB(): Promise<SilverDocument | null> {
+    try {
+      return await this.silverModel
+        .findOne({ productType: 'Bar' })
+        .sort({ createdAt: -1 })
+        .exec();
+    } catch (error) {
+      console.error('❌ Error fetching newest silver bar from DB:', error);
       return null;
     }
   }
@@ -912,18 +1018,41 @@ export class SilverService {
 
   // output 999 karat prices
   async getAll999SilverPrices(): Promise<SilverRo> {
-    const [noghra, tokeniko, silverin, noghresea, kitco] = await Promise.all([
-      this.getPriceFromNoghra(),
-      this.getPriceFromTokeniko(),
-      this.getPriceFromSilverin(),
-      this.getPriceFromNoghresea(),
-      this.getPriceFromKitco(),
-    ]);
+    const [noghra, tokeniko, silverin, noghresea, talaOunce, kitco] =
+      await Promise.all([
+        this.getPriceFromNoghra(),
+        this.getPriceFromTokeniko(),
+        this.getPriceFromSilverin(),
+        this.getPriceFromNoghresea(),
+        this.getOunceFromTalaIr(),
+        this.getPriceFromKitco(),
+      ]);
     const tomanPerDollar = await this.usdToIrrService.getTomanPerDollar();
-    const kitcoPrice = Number(kitco.price) || 0;
-    const tomanGlobalPrice = Math.floor(
-      (kitcoPrice * tomanPerDollar) / 28.3495,
-    );
+    const ounceUsd = Number(talaOunce.price[0]) || 0;
+    const kitcoPrice = Number(kitco.price[0]) || 0;
+    const TROY_OUNCE_GRAMS = 28.3495;
+
+    const globalOunceUsd = ounceUsd > 0 ? ounceUsd : 0;
+    const globalSiteNames =
+      globalOunceUsd > 0
+        ? [talaOunce.site]
+        : kitcoPrice > 0
+          ? [kitco.site]
+          : [];
+    const globalPrices: [number][] =
+      globalOunceUsd > 0
+        ? [talaOunce.price]
+        : kitcoPrice > 0
+          ? [kitco.price]
+          : [[0]];
+
+    // Global display (تومان / گرم): (اونس × دلار) ÷ ۲۸.۳۴۹۵
+    const tomanGlobalPrice =
+      globalOunceUsd > 0 && tomanPerDollar > 0
+        ? Math.floor((globalOunceUsd * tomanPerDollar) / TROY_OUNCE_GRAMS)
+        : kitcoPrice > 0 && tomanPerDollar > 0
+          ? Math.floor((kitcoPrice * tomanPerDollar) / TROY_OUNCE_GRAMS)
+          : 0;
 
     const prices = [
       noghra.price,
@@ -958,8 +1087,8 @@ export class SilverService {
       // For now, we'll set average to 0 and skip bubble calculation
     }
 
-    const globalPrices = [kitco.price];
-    const globalSiteNames = [kitco.site];
+    const globalPricesForDto = globalPrices;
+    const globalSiteNamesForDto = globalSiteNames;
 
     // Fix: Only calculate bubble if average is valid (not NaN, not 0)
     let bubble = 0;
@@ -979,8 +1108,8 @@ export class SilverService {
       productType: 'ball999',
       siteNames,
       prices,
-      globalSiteNames,
-      globalPrices,
+      globalSiteNames: globalSiteNamesForDto,
+      globalPrices: globalPricesForDto,
       weights: [[1], [1], [1], [1], [1]],
       tomanPerDollar,
       average: finalAverage,

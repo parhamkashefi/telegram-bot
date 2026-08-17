@@ -7,6 +7,7 @@ import { SilverModule } from './silver/silver.module';
 import { GoldModule } from './gold/gold.module';
 import { UsdToIrrModule } from './usdToIrr/usdToIrr.module';
 import { CoinModule } from './coin/coin.module';
+import { PriceRefreshModule } from './price-refresh/price-refresh.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { CoinModule } from './coin/coin.module';
     ),
     AuthModule,
     TelegramModule,
+    PriceRefreshModule,
     SilverModule,
     GoldModule,
     UsdToIrrModule,

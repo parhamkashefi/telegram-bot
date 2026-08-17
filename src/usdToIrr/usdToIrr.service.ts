@@ -1,80 +1,130 @@
 import { Injectable, Logger } from '@nestjs/common';
-import * as puppeteer from 'puppeteer';
+import axios from 'axios';
 import { UsdToIrr, UsdToIrrDocument } from './schema/usdToIrr.schema';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 
+type NavasanCurrency = {
+  value?: number | string;
+  date?: number;
+};
+
 @Injectable()
 export class UsdToIrrService {
   private readonly logger = new Logger(UsdToIrrService.name);
-  private readonly url = 'https://www.navasan.net/';
-  private readonly selector =
-    '#Ctable1 > div:nth-child(2) > table:nth-child(1) > tbody:nth-child(2) > tr:nth-child(1) > td:nth-child(2)';
+  private readonly navasanUrl =
+    'https://www.navasan.net/last_currencies.php';
+  private readonly bitpinMarketsUrl =
+    'https://api.bitpin.ir/v1/mkt/markets/';
+
+  private readonly httpHeaders = {
+    'User-Agent':
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    Accept: 'application/json, text/plain, */*',
+  };
 
   constructor(
     @InjectModel(UsdToIrr.name)
     private readonly usdToIrrModel: Model<UsdToIrrDocument>,
   ) {}
 
-  // Safe browser close helper
-  private async safeCloseBrowser(browser: puppeteer.Browser | null) {
-    try {
-      if (browser) await browser.close();
-    } catch (err) {
-      this.logger.error('Error closing browser:', err);
+  /**
+   * Get USD→Toman cash rate.
+   * Prefer navasan.net (دلار آمریکا نقدی); fall back to Bitpin USDT_IRT
+   * when navasan is blocked/unreachable from the server network.
+   */
+  async getTomanPerDollar(): Promise<number> {
+    const fromNavasan = await this.fetchFromNavasan();
+    if (fromNavasan > 0) {
+      await this.persistRate(fromNavasan, 'navasan');
+      return fromNavasan;
     }
+
+    const fromBitpin = await this.fetchFromBitpinUsdt();
+    if (fromBitpin > 0) {
+      await this.persistRate(fromBitpin, 'bitpin-usdt');
+      return fromBitpin;
+    }
+
+    const latest = await this.getTomanPerDollarFromDB();
+    if (latest?.tomanPerDollar && latest.tomanPerDollar > 0) {
+      this.logger.warn(
+        `Using last saved tomanPerDollar=${latest.tomanPerDollar}`,
+      );
+      return latest.tomanPerDollar;
+    }
+
+    this.logger.error('❌ No USD/Toman rate available from any source');
+    return 0;
   }
 
-  // Get Toman price per USD from Navasan
-  // Returns a number (e.g., 116950)
-  async getTomanPerDollar(): Promise<number> {
-    let browser: puppeteer.Browser | null = null;
-
+  private async fetchFromNavasan(): Promise<number> {
     try {
-      browser = await puppeteer.launch({
-        headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
-      });
-
-      const page = await browser.newPage();
-
-      await page.goto(this.url, {
-        waitUntil: 'networkidle2',
-        timeout: 30000,
-      });
-
-      // Ensure page loaded
-      await page.waitForSelector(this.selector, { timeout: 10000 });
-
-      const priceText = await page.$eval(this.selector, (el) =>
-        el.textContent?.trim(),
+      const { data } = await axios.get<Record<string, NavasanCurrency>>(
+        this.navasanUrl,
+        {
+          timeout: 12_000,
+          params: { _: Math.floor(Date.now() / 10_000) },
+          headers: {
+            ...this.httpHeaders,
+            Referer: 'https://www.navasan.net/',
+          },
+        },
       );
 
-      if (!priceText) {
-        throw new Error('Price element found but is empty.');
+      const raw = data?.usd?.value ?? data?.usd_sell?.value;
+      const numeric = Number(raw);
+      if (!Number.isFinite(numeric) || numeric <= 0) {
+        throw new Error(`Invalid navasan usd value: ${raw}`);
       }
 
-      // Remove commas -> convert to number
-      const numeric = Number(priceText.replace(/,/g, ''));
-
-      if (Number.isNaN(numeric) || numeric <= 0) {
-        throw new Error('Invalid number extracted from Navasan.');
-      }
+      this.logger.log(`navasan usd tomanPerDollar=${numeric}`);
       return numeric;
     } catch (err) {
-      this.logger.error('❌ Error fetching Toman/USD price:', err);
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`navasan USD fetch failed: ${msg}`);
       return 0;
-    } finally {
-      await this.safeCloseBrowser(browser);
     }
   }
 
-  // Optional: Retry wrapper (3 attempts)
+  /** Bitpin USDT/IRT market ≈ free-market dollar in Toman */
+  private async fetchFromBitpinUsdt(): Promise<number> {
+    try {
+      const { data } = await axios.get<{
+        results?: Array<{ code?: string; price?: string | number }>;
+      }>(this.bitpinMarketsUrl, {
+        timeout: 20_000,
+        headers: this.httpHeaders,
+      });
+
+      const market = (data?.results || []).find((m) => m.code === 'USDT_IRT');
+      const numeric = Number(market?.price);
+      if (!Number.isFinite(numeric) || numeric <= 0) {
+        throw new Error(`USDT_IRT not found or invalid: ${market?.price}`);
+      }
+
+      this.logger.log(`bitpin USDT_IRT tomanPerDollar=${numeric}`);
+      return Math.round(numeric);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`bitpin USD fetch failed: ${msg}`);
+      return 0;
+    }
+  }
+
+  private async persistRate(tomanPerDollar: number, source: string) {
+    try {
+      await this.usdToIrrModel.create({ tomanPerDollar });
+      this.logger.log(`saved tomanPerDollar=${tomanPerDollar} source=${source}`);
+    } catch (err) {
+      this.logger.warn(`failed to persist tomanPerDollar: ${err}`);
+    }
+  }
+
   async getWithRetry(retry = 3): Promise<number | null> {
     for (let i = 1; i <= retry; i++) {
       const result = await this.getTomanPerDollar();
       if (result) return result;
-
       this.logger.warn(`Retry ${i}/${retry}...`);
     }
     return null;
