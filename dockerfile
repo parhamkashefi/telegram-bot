@@ -1,21 +1,5 @@
 FROM node:20-alpine AS builder
 
-RUN apk add --no-cache \
-    chromium \
-    nss \
-    freetype \
-    harfbuzz \
-    ca-certificates \
-    ttf-freefont \
-    curl \
-    bash \
-    python3 \
-    make \
-    g++
-
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser \
-    PUPPETEER_SKIP_DOWNLOAD=true
-
 WORKDIR /usr/src/app
 
 COPY package.json package-lock.json* yarn.lock* ./
@@ -26,19 +10,7 @@ RUN npm run build
 
 FROM node:20-alpine AS production
 
-RUN apk add --no-cache \
-    chromium \
-    nss \
-    freetype \
-    harfbuzz \
-    ca-certificates \
-    ttf-freefont \
-    curl \
-    bash
-
-ENV NODE_ENV=production \
-    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser \
-    PUPPETEER_SKIP_DOWNLOAD=true
+ENV NODE_ENV=production
 
 WORKDIR /usr/src/app
 

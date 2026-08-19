@@ -21,8 +21,8 @@ async function bootstrap() {
   });
 
   const config = new DocumentBuilder()
-    .setTitle('Soprano')
-    .setDescription('Soprano Bot API documentation')
+    .setTitle('Soprano Price API')
+    .setDescription('Public gold, silver, and coin price API')
     .setVersion('1.0')
     .addBearerAuth()
     .build();

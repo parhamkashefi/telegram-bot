@@ -1,7 +1,7 @@
 {
-  "name": "soprano-bot",
+  "name": "soprano-price-api",
   "version": "0.0.1",
-  "description": "",
+  "description": "HTTP price crawler / public API for Soprano (gold, silver, coins)",
   "author": "",
   "private": true,
   "license": "UNLICENSED",
@@ -38,16 +38,12 @@
     "moment-jalaali": "^0.10.4",
     "moment-timezone": "^0.6.0",
     "mongoose": "^8.19.1",
-    "node-telegram-bot-api": "^0.66.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "passport-local": "^1.0.0",
-    "puppeteer": "^24.16.0",
-    "puppeteer-core": "^24.16.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
-    "swagger-ui-express": "^5.0.1",
-    "telegram": "^2.26.22"
+    "swagger-ui-express": "^5.0.1"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",

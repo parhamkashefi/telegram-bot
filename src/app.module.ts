@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
-import { TelegramModule } from './telegram/telegram.module';
 import { AuthModule } from './auth/auth.module';
 import { SilverModule } from './silver/silver.module';
 import { GoldModule } from './gold/gold.module';
@@ -27,7 +26,6 @@ import { PriceRefreshModule } from './price-refresh/price-refresh.module';
       },
     ),
     AuthModule,
-    TelegramModule,
     PriceRefreshModule,
     SilverModule,
     GoldModule,

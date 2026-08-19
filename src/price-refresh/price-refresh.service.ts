@@ -1,18 +1,15 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { GoldService } from '../gold/gold.service';
 import { SilverService } from '../silver/silver.service';
 import { CoinService } from '../coin/coin.service';
-import { TelegramService } from '../telegram/telegram.service';
 
 const REFRESH_INTERVAL_MS = 30 * 60 * 1000;
 const LIVE_GOLD_INTERVAL_MS = 10 * 1000;
 const INITIAL_DELAY_MS = 15_000;
 
 /**
- * Periodically crawls gold/silver prices into MongoDB so the public website
- * API can serve fresh data. Works without Telegram credentials.
- * When BOT_TOKEN + GROUP_CHAT_ID are set, also posts updates to the group.
+ * Periodically refreshes gold/silver/coin prices into MongoDB via HTTP APIs
+ * so the public website can serve fresh data. No Telegram / no browser.
  */
 @Injectable()
 export class PriceRefreshService implements OnModuleInit, OnModuleDestroy {
@@ -24,16 +21,14 @@ export class PriceRefreshService implements OnModuleInit, OnModuleDestroy {
   private liveGoldRefreshInProgress = false;
 
   constructor(
-    private readonly configService: ConfigService,
     private readonly goldService: GoldService,
     private readonly silverService: SilverService,
     private readonly coinService: CoinService,
-    private readonly telegramService: TelegramService,
   ) {}
 
   onModuleInit() {
     this.logger.log(
-      `🚀 Price refresh scheduler started (full crawl every ${REFRESH_INTERVAL_MS / 60_000} minutes, live gold/coins every ${LIVE_GOLD_INTERVAL_MS / 1000}s)`,
+      `🚀 Price refresh scheduler started (full HTTP refresh every ${REFRESH_INTERVAL_MS / 60_000} minutes, live gold/coins every ${LIVE_GOLD_INTERVAL_MS / 1000}s)`,
     );
 
     this.initialTimeout = setTimeout(() => {
@@ -65,30 +60,15 @@ export class PriceRefreshService implements OnModuleInit, OnModuleDestroy {
     }
 
     this.refreshInProgress = true;
-    this.logger.log('🔄 Refreshing gold & silver prices...');
+    this.logger.log('🔄 Refreshing gold, silver & coin prices (HTTP)...');
 
     try {
-      const [goldPrices, silverBallPrices, silverBarPrices] = await Promise.all([
-        this.goldService.getAllGoldPrices(),
-        this.silverService.getAll999SilverPrices(),
-        this.silverService.getAllSilverBarPrices(),
+      await Promise.all([
+        this.goldService.refreshHomepageGoldPrices(),
+        this.silverService.refreshHomepageSilverPrices(),
+        this.coinService.refreshTabloTalaCoins(),
       ]);
-
       this.logger.log('✅ Prices saved to MongoDB');
-
-      const groupChatId = this.configService.get<string>('GROUP_CHAT_ID') || '';
-      if (this.telegramService.isEnabled() && groupChatId) {
-        await this.telegramService.sendCrawledPricesToChat(
-          groupChatId,
-          goldPrices,
-          silverBallPrices,
-          silverBarPrices,
-        );
-      } else {
-        this.logger.log(
-          'ℹ️ Telegram notify skipped (BOT_TOKEN or GROUP_CHAT_ID not set)',
-        );
-      }
     } catch (error) {
       this.logger.error('❌ Price refresh failed', error);
     } finally {
