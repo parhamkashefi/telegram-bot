@@ -1030,7 +1030,8 @@ export class SilverService {
     const tomanPerDollar = await this.usdToIrrService.getTomanPerDollar();
     const ounceUsd = Number(talaOunce.price[0]) || 0;
     const kitcoPrice = Number(kitco.price[0]) || 0;
-    const TROY_OUNCE_GRAMS = 28.3495;
+    // (اونس × ۳۲.۱۵ × دلار) ÷ ۱۰۰۰ → تومان / گرم
+    const OUNCE_TO_KG_FACTOR = 32.15;
 
     const globalOunceUsd = ounceUsd > 0 ? ounceUsd : 0;
     const globalSiteNames =
@@ -1046,12 +1047,16 @@ export class SilverService {
           ? [kitco.price]
           : [[0]];
 
-    // Global display (تومان / گرم): (اونس × دلار) ÷ ۲۸.۳۴۹۵
+    // Global display (تومان / گرم): (اونس × ۳۲.۱۵ × دلار) ÷ ۱۰۰۰
     const tomanGlobalPrice =
       globalOunceUsd > 0 && tomanPerDollar > 0
-        ? Math.floor((globalOunceUsd * tomanPerDollar) / TROY_OUNCE_GRAMS)
+        ? Math.floor(
+            (globalOunceUsd * OUNCE_TO_KG_FACTOR * tomanPerDollar) / 1000,
+          )
         : kitcoPrice > 0 && tomanPerDollar > 0
-          ? Math.floor((kitcoPrice * tomanPerDollar) / TROY_OUNCE_GRAMS)
+          ? Math.floor(
+              (kitcoPrice * OUNCE_TO_KG_FACTOR * tomanPerDollar) / 1000,
+            )
           : 0;
 
     const prices = [

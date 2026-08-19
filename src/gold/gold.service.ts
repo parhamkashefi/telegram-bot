@@ -101,10 +101,12 @@ export class GoldService {
   }
 
   // 🔸 Site 1 - estjt.ir
-  async getPriceFromEstjt(): Promise<{ site: string; prices: [number] }> {
+  async getPriceFromEstjt(
+    timeoutMs = 20000,
+  ): Promise<{ site: string; prices: [number] }> {
     try {
       const { data } = await axios.get('https://www.estjt.ir/price/', {
-        timeout: 20000,
+        timeout: timeoutMs,
       });
 
       const $ = cheerio.load(data);
@@ -257,10 +259,12 @@ export class GoldService {
   }
 
   // 🔸 Site 4 - tala.ir (18k gram) — same approach as silver-project
-  async getPriceFromTalaIr(): Promise<{ site: string; prices: [number] }> {
+  async getPriceFromTalaIr(
+    timeoutMs = 20000,
+  ): Promise<{ site: string; prices: [number] }> {
     try {
       const { data } = await axios.get('https://www.tala.ir/price/18k', {
-        timeout: 20000,
+        timeout: timeoutMs,
         headers: this.talaBrowserHeaders,
       });
 
@@ -284,10 +288,88 @@ export class GoldService {
   }
 
   /** Global ounce (USD) from tala.ir — used for قیمت طلا در بازارهای جهانی */
-  async getOunceFromTalaIr(): Promise<{ site: string; price: [number] }> {
+  /**
+   * Tablo Tala TV board IR feed (انس, گرم ۱۸, coins, …).
+   */
+  private async fetchTabloTalaIrRows(
+    timeoutMs = 8000,
+  ): Promise<Map<string, number>> {
+    const byType = new Map<string, number>();
+    try {
+      const { data } = await axios.get<{
+        status?: string;
+        data?: Array<{ type?: string; price?: number }>;
+      }>('https://admin.tablotala.app/api/tv/price?type=IR', {
+        timeout: timeoutMs,
+        headers: {
+          Accept: 'application/json',
+          Origin: 'https://tv.tablotala.app',
+          Referer: 'https://tv.tablotala.app/',
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        },
+      });
+
+      const rows = Array.isArray(data?.data) ? data.data : [];
+      for (const row of rows) {
+        const type = String(row?.type || '');
+        const price = Number(row?.price);
+        if (type && Number.isFinite(price) && price > 0) {
+          byType.set(type, price);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching Tablo Tala IR feed:', error);
+    }
+    return byType;
+  }
+
+  /**
+   * Tablo Tala TV board ounce (انس), type=GOLD on the same IR feed as coins.
+   */
+  async getOunceFromTabloTala(
+    timeoutMs = 8000,
+  ): Promise<{ site: string; price: [number] }> {
+    const byType = await this.fetchTabloTalaIrRows(timeoutMs);
+    const price = byType.get('GOLD') || 0;
+
+    console.log('gold tablotala ounce', {
+      site: 'tablotala',
+      price: [price],
+    });
+
+    return {
+      site: 'tablotala',
+      price: [price],
+    };
+  }
+
+  /**
+   * Tablo Tala TV board Iran 18k gram (گرم ۱۸), type=IRG18.
+   */
+  async getIran18kFromTabloTala(
+    timeoutMs = 8000,
+  ): Promise<{ site: string; prices: [number] }> {
+    const byType = await this.fetchTabloTalaIrRows(timeoutMs);
+    const price = byType.get('IRG18') || 0;
+
+    console.log('gold tablotala 18k', {
+      site: 'tablotala',
+      prices: [price],
+    });
+
+    return {
+      site: 'tablotala',
+      prices: [price],
+    };
+  }
+
+  async getOunceFromTalaIr(
+    timeoutMs = 20000,
+  ): Promise<{ site: string; price: [number] }> {
     try {
       const { data } = await axios.get('https://www.tala.ir/price/ounce', {
-        timeout: 20000,
+        timeout: timeoutMs,
         headers: this.talaBrowserHeaders,
       });
 
@@ -402,31 +484,139 @@ export class GoldService {
     });
   }
 
+  /**
+   * Fast homepage refresh: HTTP sources only (no Puppeteer).
+   * Updates the latest gold document in place so Mongo does not grow every tick.
+   */
+  async refreshHomepageGoldPrices(): Promise<GoldRo | null> {
+    const LIVE_TIMEOUT_MS = 8000;
+    const previous = await this.goldModel
+      .findOne({ productType: 'gold' })
+      .sort({ createdAt: -1 });
+
+    const tabloRows = await this.fetchTabloTalaIrRows(LIVE_TIMEOUT_MS);
+    let iran18k = tabloRows.get('IRG18') || 0;
+    let iranSite = 'tablotala';
+    let ounceUsd = tabloRows.get('GOLD') || 0;
+    let ounceSite = 'tablotala';
+
+    if (iran18k <= 0) {
+      const talaIr = await this.getPriceFromTalaIr(LIVE_TIMEOUT_MS);
+      iran18k = Number(talaIr.prices[0]) || 0;
+      iranSite = talaIr.site;
+    }
+    if (iran18k <= 0) {
+      iran18k = previous?.average || 0;
+      iranSite = previous?.siteNames?.[0] || iranSite;
+    }
+
+    if (ounceUsd <= 0) {
+      const talaOunce = await this.getOunceFromTalaIr(LIVE_TIMEOUT_MS);
+      ounceUsd = Number(talaOunce.price[0]) || 0;
+      ounceSite = talaOunce.site;
+    }
+    if (ounceUsd <= 0) {
+      ounceUsd = Number(previous?.globalPrices?.[0]?.[0]) || 0;
+      ounceSite = previous?.globalSiteNames?.[0] || ounceSite;
+    }
+
+    const average = iran18k;
+
+    const tomanPerDollar =
+      previous?.tomanPerDollar && previous.tomanPerDollar > 0
+        ? previous.tomanPerDollar
+        : await this.usdToIrrService.getTomanPerDollar();
+
+    const TROY_OUNCE_GRAMS = 31.1034768;
+    const GOLD_18K_PURITY = 0.75;
+    const tomanGlobalPrice =
+      ounceUsd > 0 && tomanPerDollar > 0
+        ? Math.floor(
+            ((ounceUsd * tomanPerDollar) / TROY_OUNCE_GRAMS) * GOLD_18K_PURITY,
+          )
+        : previous?.tomanGlobalPrice || 0;
+
+    if (average <= 0 && tomanGlobalPrice <= 0) {
+      return previous
+        ? plainToInstance(GoldRo, previous.toObject(), {
+            excludeExtraneousValues: true,
+          })
+        : null;
+    }
+
+    const finalAverage =
+      average > 0 ? average : previous?.average || 0;
+    let bubble = 0;
+    if (finalAverage > 0 && tomanGlobalPrice > 0) {
+      bubble = ((finalAverage - tomanGlobalPrice) / finalAverage) * 100;
+    }
+
+    const globalSiteNames =
+      ounceUsd > 0 ? [ounceSite] : previous?.globalSiteNames || [];
+    const globalPrices: [number][] = [[ounceUsd || 0]];
+
+    const payload: GoldDto = {
+      productType: 'gold',
+      siteNames: [iranSite],
+      prices: [[iran18k || 0]],
+      globalSiteNames,
+      globalPrices,
+      tomanPerDollar,
+      average: finalAverage,
+      tomanGlobalPrice,
+      bubble,
+    };
+
+    if (!previous) {
+      return this.createGoldPrices(payload);
+    }
+
+    previous.set({
+      ...payload,
+      weights: [[1]],
+      fetchedAtUtc: new Date(),
+    });
+    await previous.save();
+    return plainToInstance(GoldRo, previous.toObject(), {
+      excludeExtraneousValues: true,
+    });
+  }
+
   async getAllGoldPrices(): Promise<GoldRo> {
-    const [estjt, tabloTala, tabanGohar, talaIr, talaOunce, kitco] =
+    const [estjt, tabloTala, tabanGohar, talaIr, tabloOunce, talaOunce, kitco] =
       await Promise.all([
         this.getPriceFromEstjt(),
         this.getPriceFromTabloTala(),
         this.getPriceFromTabanGohar(),
         this.getPriceFromTalaIr(),
+        this.getOunceFromTabloTala(),
         this.getOunceFromTalaIr(),
         this.getPriceFromKitco(),
       ]);
 
     const tomanPerDollar = await this.usdToIrrService.getTomanPerDollar();
-    const ounceUsd = Number(talaOunce.price[0]) || 0;
+    const tabloOunceUsd = Number(tabloOunce.price[0]) || 0;
+    const talaOunceUsd = Number(talaOunce.price[0]) || 0;
     const kitcoGramUsd = Number(kitco.price[0]) || 0;
 
-    // Prefer tala.ir global ounce; fall back to Kitco per-gram when ounce unavailable
-    const globalOunceUsd = ounceUsd > 0 ? ounceUsd : 0;
+    const globalOunceUsd =
+      tabloOunceUsd > 0 ? tabloOunceUsd : talaOunceUsd > 0 ? talaOunceUsd : 0;
     const globalSiteNames =
-      globalOunceUsd > 0 ? [talaOunce.site] : kitcoGramUsd > 0 ? [kitco.site] : [];
+      tabloOunceUsd > 0
+        ? [tabloOunce.site]
+        : talaOunceUsd > 0
+          ? [talaOunce.site]
+          : kitcoGramUsd > 0
+            ? [kitco.site]
+            : [];
     const globalPrices: [number][] =
-      globalOunceUsd > 0
-        ? [talaOunce.price]
-        : kitcoGramUsd > 0
-          ? [kitco.price]
-          : [[0]];
+      tabloOunceUsd > 0
+        ? [tabloOunce.price]
+        : talaOunceUsd > 0
+          ? [talaOunce.price]
+          : kitcoGramUsd > 0
+            ? [kitco.price]
+            : [[0]];
 
     // Global display (تومان / گرم ۱۸ عیار): (اونس × دلار ÷ ۳۱.۱۰۳۴۷۶۸) × ۰.۷۵
     const TROY_OUNCE_GRAMS = 31.1034768;
@@ -466,11 +656,16 @@ export class GoldService {
       }
     }
     let average = 0;
-    if (count > 0) {
+    const tala18k = Number(talaIr.prices[0]) || 0;
+    if (tala18k > 0) {
+      // Homepage "طلا ۱۸ عیار" should match tala.ir گرم ۱۸, not a multi-site average.
+      average = tala18k;
+      console.log('average (tala.ir 18k): ', average);
+    } else if (count > 0) {
       average = sum / count;
-      console.log('average : ', average);
+      console.log('average (fallback multi-site): ', average);
     } else {
-      console.warn('⚠️ All silver prices are 0, cannot calculate average');
+      console.warn('⚠️ All gold prices are 0, cannot calculate average');
     }
 
     const globalPricesForDto = globalPrices;

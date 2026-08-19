@@ -3,7 +3,7 @@ import { Expose, Transform } from 'class-transformer';
 
 export class CoinRo {
   @Expose()
-  @Transform(({ obj }) => obj._id.toString())
+  @Transform(({ obj }) => obj._id?.toString?.() ?? obj.id)
   id: string;
 
   @ApiProperty({ example: 'coin' })
@@ -27,4 +27,24 @@ export class CoinRo {
 
   @Expose()
   createdAt: Date;
+
+  @ApiProperty({ example: 188000000 })
+  @Expose()
+  oldCoin: number;
+
+  @ApiProperty({ example: 189600000 })
+  @Expose()
+  newCoin: number;
+
+  @ApiProperty({ example: 96500000 })
+  @Expose()
+  halfCoin: number;
+
+  @ApiProperty({ example: 53000000 })
+  @Expose()
+  quarterCoin: number;
+
+  @ApiProperty({ example: 28000000 })
+  @Expose()
+  gramCoin: number;
 }
