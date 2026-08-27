@@ -228,10 +228,13 @@ export class GoldService {
 
     const average = iran18k;
 
+    const fetchedTomanPerDollar = await this.usdToIrrService.getTomanPerDollar();
     const tomanPerDollar =
-      previous?.tomanPerDollar && previous.tomanPerDollar > 0
-        ? previous.tomanPerDollar
-        : await this.usdToIrrService.getTomanPerDollar();
+      fetchedTomanPerDollar > 0
+        ? fetchedTomanPerDollar
+        : previous?.tomanPerDollar && previous.tomanPerDollar > 0
+          ? previous.tomanPerDollar
+          : 0;
 
     const TROY_OUNCE_GRAMS = 31.1034768;
     const GOLD_18K_PURITY = 0.75;

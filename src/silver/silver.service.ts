@@ -30,41 +30,137 @@ export class SilverService {
     Accept: 'application/json, text/plain, */*',
   };
 
-  private parseTalaOunceUsd(raw: string): number {
-    const ascii = this.toEnglishDigits(raw.trim())
+  private parseOunceUsd(raw: string): number {
+    const ascii = this.toEnglishDigits(String(raw ?? '').trim())
       .replace(/\//g, '.')
+      .replace(/,/g, '')
       .replace(/[^\d.]/g, '');
     const value = Number.parseFloat(ascii);
-    return Number.isFinite(value) && value > 0 ? value : 0;
+    // Global silver ounce is typically ~20–100 USD
+    return Number.isFinite(value) && value >= 10 && value <= 500 ? value : 0;
+  }
+
+  private parseMoj3SilverOunce(html: string): number {
+    const withoutBlocks = html
+      .replace(/<script[\s\S]*?<\/script>/gi, '\n')
+      .replace(/<style[\s\S]*?<\/style>/gi, '\n');
+    const text = withoutBlocks.replace(/<[^>]+>/g, '\n');
+    const lines = text
+      .split(/\n+/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i] !== 'انس جهانی نقره') continue;
+      const price = this.parseOunceUsd(lines[i + 1] || '');
+      if (price > 0) return price;
+    }
+    return 0;
   }
 
   /**
-   * Global silver ounce (USD) from tala.ir homepage banner feed.
+   * SILVER Buy price (USD/oz) from trendo.com price ticker (xagusd).
    */
-  async getOunceFromTalaIr(
+  async getOunceFromTrendo(
     timeoutMs = 20000,
   ): Promise<{ site: string; price: [number] }> {
     try {
-      const url = `https://www.tala.ir/banner/?rnd=${Date.now()}&ids=1001,&is-mobile=0&android=0&ios=0&rnd=1263&h=1080&w=1920`;
-      const { data } = await axios.get<{ price?: { silver?: string } }>(url, {
+      const { data: html } = await axios.get<string>('https://trendo.com/', {
         timeout: timeoutMs,
+        responseType: 'text',
         headers: {
           ...this.httpHeaders,
-          Referer: 'https://www.tala.ir/',
+          Accept: 'text/html,application/xhtml+xml,*/*',
+          Referer: 'https://trendo.com/',
         },
       });
 
-      const rawText = data?.price?.silver?.trim() || '';
-      const price = this.parseTalaOunceUsd(rawText);
+      const nonceMatch = html.match(
+        /data-symbol="xagusd"[\s\S]{0,500}?data-nonce="([^"]+)"/,
+      );
+      const nonce = nonceMatch?.[1];
+
+      if (nonce) {
+        const { data } = await axios.get<{
+          success?: boolean;
+          data?: {
+            items?: Array<{ symbol?: string; buy?: string | number }>;
+          };
+        }>('https://trendo.com/wp-admin/admin-ajax.php', {
+          timeout: timeoutMs,
+          params: {
+            action: 'fxtrendo_price_ticker',
+            symbols: 'xagusd',
+            _nonce: nonce,
+          },
+          headers: {
+            ...this.httpHeaders,
+            Referer: 'https://trendo.com/',
+            'X-Requested-With': 'XMLHttpRequest',
+          },
+        });
+
+        const item = (data?.data?.items || []).find(
+          (row) => String(row.symbol || '').toLowerCase() === 'xagusd',
+        );
+        const liveBuy = this.parseOunceUsd(String(item?.buy ?? ''));
+        if (liveBuy > 0) {
+          return { site: 'trendo.com', price: [liveBuy] };
+        }
+      }
+
+      const initialMatch = html.match(
+        /data-symbol="xagusd"[\s\S]{0,800}?data-initial-price="([^"]+)"/,
+      );
+      if (initialMatch?.[1]) {
+        const decoded = initialMatch[1].replace(/&quot;/g, '"');
+        const parsed = JSON.parse(decoded) as { buy?: string | number };
+        const buy = this.parseOunceUsd(String(parsed.buy ?? ''));
+        if (buy > 0) {
+          return { site: 'trendo.com', price: [buy] };
+        }
+      }
+
+      throw new Error('Could not parse SILVER buy from trendo.com');
+    } catch (error) {
+      console.error('❌ Error fetching silver ounce from trendo.com:', error);
+      return {
+        site: 'trendo.com',
+        price: [0],
+      };
+    }
+  }
+
+  /**
+   * Fallback: global silver ounce (USD) from moj3.ir/price/ (انس جهانی نقره).
+   */
+  async getOunceFromMoj3(
+    timeoutMs = 20000,
+  ): Promise<{ site: string; price: [number] }> {
+    try {
+      const { data: html } = await axios.get<string>('https://moj3.ir/price/', {
+        timeout: timeoutMs,
+        responseType: 'text',
+        headers: {
+          ...this.httpHeaders,
+          Accept: 'text/html,application/xhtml+xml,*/*',
+          Referer: 'https://moj3.ir/',
+        },
+      });
+
+      const price = this.parseMoj3SilverOunce(html);
+      if (!price) {
+        throw new Error('Could not parse انس جهانی نقره from moj3 HTML');
+      }
 
       return {
-        site: 'tala.ir',
+        site: 'moj3.ir',
         price: [price],
       };
     } catch (error) {
-      console.error('❌ Error fetching silver ounce from tala.ir:', error);
+      console.error('❌ Error fetching silver ounce from moj3.ir:', error);
       return {
-        site: 'tala.ir',
+        site: 'moj3.ir',
         price: [0],
       };
     }
@@ -186,33 +282,42 @@ export class SilverService {
       .findOne({ productType: 'ball999' })
       .sort({ createdAt: -1 });
 
-    const [talaOunce, kitco] = await Promise.all([
-      this.getOunceFromTalaIr(12000),
+    const [trendoOunce, moj3Ounce, kitco] = await Promise.all([
+      this.getOunceFromTrendo(15000),
+      this.getOunceFromMoj3(15000),
       this.getPriceFromKitco(),
     ]);
 
+    const fetchedTomanPerDollar = await this.usdToIrrService.getTomanPerDollar();
     const tomanPerDollar =
-      previous?.tomanPerDollar && previous.tomanPerDollar > 0
-        ? previous.tomanPerDollar
-        : await this.usdToIrrService.getTomanPerDollar();
+      fetchedTomanPerDollar > 0
+        ? fetchedTomanPerDollar
+        : previous?.tomanPerDollar && previous.tomanPerDollar > 0
+          ? previous.tomanPerDollar
+          : 0;
 
-    const ounceUsd = Number(talaOunce.price[0]) || 0;
+    const trendoPrice = Number(trendoOunce.price[0]) || 0;
+    const moj3Price = Number(moj3Ounce.price[0]) || 0;
     const kitcoPrice = Number(kitco.price[0]) || 0;
     const OUNCE_TO_KG_FACTOR = 32.15;
 
     const globalOunceUsd =
-      ounceUsd > 0
-        ? ounceUsd
-        : kitcoPrice > 0
-          ? kitcoPrice
-          : Number(previous?.globalPrices?.[0]?.[0]) || 0;
+      trendoPrice > 0
+        ? trendoPrice
+        : moj3Price > 0
+          ? moj3Price
+          : kitcoPrice > 0
+            ? kitcoPrice
+            : Number(previous?.globalPrices?.[0]?.[0]) || 0;
 
     const globalSiteNames =
-      ounceUsd > 0
-        ? [talaOunce.site]
-        : kitcoPrice > 0
-          ? [kitco.site]
-          : previous?.globalSiteNames || [];
+      trendoPrice > 0
+        ? [trendoOunce.site]
+        : moj3Price > 0
+          ? [moj3Ounce.site]
+          : kitcoPrice > 0
+            ? [kitco.site]
+            : previous?.globalSiteNames || [];
 
     const globalPrices: [number][] = [[globalOunceUsd || 0]];
 

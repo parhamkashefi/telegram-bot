@@ -3,7 +3,7 @@ import { GoldService } from '../gold/gold.service';
 import { SilverService } from '../silver/silver.service';
 import { CoinService } from '../coin/coin.service';
 
-const REFRESH_INTERVAL_MS = 30 * 60 * 1000;
+const REFRESH_INTERVAL_MS = 1 * 60 * 1000;
 const LIVE_GOLD_INTERVAL_MS = 10 * 1000;
 const INITIAL_DELAY_MS = 15_000;
 

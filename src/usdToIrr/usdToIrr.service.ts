@@ -12,6 +12,7 @@ type NavasanCurrency = {
 @Injectable()
 export class UsdToIrrService {
   private readonly logger = new Logger(UsdToIrrService.name);
+  private readonly moj3PriceUrl = 'https://moj3.ir/price/';
   private readonly navasanUrl =
     'https://www.navasan.net/last_currencies.php';
   private readonly bitpinMarketsUrl =
@@ -30,10 +31,15 @@ export class UsdToIrrService {
 
   /**
    * Get USD→Toman cash rate.
-   * Prefer navasan.net (دلار آمریکا نقدی); fall back to Bitpin USDT_IRT
-   * when navasan is blocked/unreachable from the server network.
+   * Order: moj3.ir (دلار نقدی) → navasan → Bitpin USDT_IRT → last DB value.
    */
   async getTomanPerDollar(): Promise<number> {
+    const fromMoj3 = await this.fetchFromMoj3();
+    if (fromMoj3 > 0) {
+      await this.persistRate(fromMoj3, 'moj3');
+      return fromMoj3;
+    }
+
     const fromNavasan = await this.fetchFromNavasan();
     if (fromNavasan > 0) {
       await this.persistRate(fromNavasan, 'navasan');
@@ -55,6 +61,65 @@ export class UsdToIrrService {
     }
 
     this.logger.error('❌ No USD/Toman rate available from any source');
+    return 0;
+  }
+
+  /** Cash USD (دلار) from moj3.ir/price/ — reachable from the production DC. */
+  private async fetchFromMoj3(): Promise<number> {
+    try {
+      const { data: html } = await axios.get<string>(this.moj3PriceUrl, {
+        timeout: 15_000,
+        responseType: 'text',
+        headers: {
+          ...this.httpHeaders,
+          Accept: 'text/html,application/xhtml+xml,*/*',
+          Referer: 'https://moj3.ir/',
+        },
+      });
+
+      const numeric = this.parseMoj3CashDollar(html);
+      if (!numeric) {
+        throw new Error('Could not parse دلار from moj3 HTML');
+      }
+
+      this.logger.log(`moj3 usd tomanPerDollar=${numeric}`);
+      return numeric;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`moj3 USD fetch failed: ${msg}`);
+      return 0;
+    }
+  }
+
+  private parseMoj3CashDollar(html: string): number {
+    const withoutBlocks = html
+      .replace(/<script[\s\S]*?<\/script>/gi, '\n')
+      .replace(/<style[\s\S]*?<\/style>/gi, '\n');
+    const text = withoutBlocks.replace(/<[^>]+>/g, '\n');
+    const lines = text
+      .split(/\n+/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i] !== 'دلار') continue;
+      const raw = lines[i + 1]?.replace(/,/g, '');
+      const numeric = Number(raw);
+      if (Number.isFinite(numeric) && numeric >= 50_000 && numeric <= 2_000_000) {
+        return Math.round(numeric);
+      }
+    }
+
+    const baseMatch = html.match(
+      /مبنای محاسبه:\s*دلار\s*([\d,]+)/,
+    );
+    if (baseMatch?.[1]) {
+      const numeric = Number(baseMatch[1].replace(/,/g, ''));
+      if (Number.isFinite(numeric) && numeric >= 50_000 && numeric <= 2_000_000) {
+        return Math.round(numeric);
+      }
+    }
+
     return 0;
   }
 
