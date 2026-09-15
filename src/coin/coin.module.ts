@@ -6,6 +6,7 @@ import { UsdToIrrModule } from 'src/usdToIrr/usdToIrr.module';
 import { Coin, CoinSchema } from './schema/coin.schema';
 import { CoinController } from './coin.controller';
 import { CoinService } from './coin.service';
+import { TabloTalaModule } from '../tablotala/tablotala.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { CoinService } from './coin.service';
     AuthModule,
     MongooseModule.forFeature([{ name: Coin.name, schema: CoinSchema }]),
     forwardRef(() => UsdToIrrModule),
+    TabloTalaModule,
   ],
   controllers: [CoinController],
   providers: [CoinService],

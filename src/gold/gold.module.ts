@@ -6,6 +6,7 @@ import { AuthModule } from '../auth/auth.module';
 import { GoldController } from './gold.controller';
 import { Gold, GoldSchema } from './schema/gold.schema';
 import { UsdToIrrModule } from 'src/usdToIrr/usdToIrr.module';
+import { TabloTalaModule } from '../tablotala/tablotala.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { UsdToIrrModule } from 'src/usdToIrr/usdToIrr.module';
     AuthModule,
     MongooseModule.forFeature([{ name: Gold.name, schema: GoldSchema }]),
     forwardRef(() => UsdToIrrModule),
+    TabloTalaModule,
   ],
   controllers: [GoldController],
   providers: [GoldService],

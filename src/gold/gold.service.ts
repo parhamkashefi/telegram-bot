@@ -8,12 +8,14 @@ import { plainToInstance } from 'class-transformer';
 import { GoldRo } from './dto/gold.ro';
 import { GoldDto } from './dto/gold.dto';
 import { UsdToIrrService } from 'src/usdToIrr/usdToIrr.service';
+import { TabloTalaService } from '../tablotala/tablotala.service';
 
 @Injectable()
 export class GoldService {
   constructor(
     @InjectModel(Gold.name) private readonly goldModel: Model<GoldDocument>,
     private readonly usdToIrrService: UsdToIrrService,
+    private readonly tabloTalaService: TabloTalaService,
   ) {}
 
   toEnglishDigits(str: string): string {
@@ -72,34 +74,7 @@ export class GoldService {
   private async fetchTabloTalaIrRows(
     timeoutMs = 8000,
   ): Promise<Map<string, number>> {
-    const byType = new Map<string, number>();
-    try {
-      const { data } = await axios.get<{
-        status?: string;
-        data?: Array<{ type?: string; price?: number }>;
-      }>('https://admin.tablotala.app/api/tv/price?type=IR', {
-        timeout: timeoutMs,
-        headers: {
-          Accept: 'application/json',
-          Origin: 'https://tv.tablotala.app',
-          Referer: 'https://tv.tablotala.app/',
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        },
-      });
-
-      const rows = Array.isArray(data?.data) ? data.data : [];
-      for (const row of rows) {
-        const type = String(row?.type || '');
-        const price = Number(row?.price);
-        if (type && Number.isFinite(price) && price > 0) {
-          byType.set(type, price);
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching Tablo Tala IR feed:', error);
-    }
-    return byType;
+    return this.tabloTalaService.getPrices(timeoutMs);
   }
 
   async getOunceFromTabloTala(
@@ -191,7 +166,7 @@ export class GoldService {
   }
 
   /**
-   * Homepage refresh: HTTP sources only (Tablo Tala + tala.ir fallbacks).
+   * Homepage refresh: member Tablo Tala webservice, then tala.ir fallbacks.
    * Updates the latest gold document in place.
    */
   async refreshHomepageGoldPrices(): Promise<GoldRo | null> {

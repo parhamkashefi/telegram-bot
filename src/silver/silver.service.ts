@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import axios from 'axios';
+import * as cheerio from 'cheerio';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { SilverRo } from './dto/silver.ro';
@@ -30,6 +31,13 @@ export class SilverService {
     Accept: 'application/json, text/plain, */*',
   };
 
+  private readonly talaBrowserHeaders = {
+    'User-Agent':
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    Accept: 'text/html,application/xhtml+xml',
+    Referer: 'https://www.tala.ir/',
+  };
+
   private parseOunceUsd(raw: string): number {
     const ascii = this.toEnglishDigits(String(raw ?? '').trim())
       .replace(/\//g, '.')
@@ -56,6 +64,113 @@ export class SilverService {
       if (price > 0) return price;
     }
     return 0;
+  }
+
+  private parseTalaSilverOunceField(raw: unknown): number {
+    if (raw == null) return 0;
+    if (typeof raw === 'number') return this.parseOunceUsd(String(raw));
+    if (typeof raw === 'string') {
+      const text = cheerio.load(raw).root().text().trim() || raw;
+      return this.parseOunceUsd(text);
+    }
+    if (typeof raw === 'object') {
+      const rec = raw as Record<string, unknown>;
+      return (
+        this.parseTalaSilverOunceField(rec.v) ||
+        this.parseTalaSilverOunceField(rec.price) ||
+        this.parseTalaSilverOunceField(rec.p) ||
+        this.parseTalaSilverOunceField(rec.value)
+      );
+    }
+    return 0;
+  }
+
+  /**
+   * Global silver ounce (USD) from tala.ir homepage tile نقره(اونس).
+   * The visible value is filled from /banner/ `price.silver`.
+   */
+  async getOunceFromTalaIr(
+    timeoutMs = 20000,
+  ): Promise<{ site: string; price: [number] }> {
+    try {
+      const { data: html } = await axios.get<string>('https://www.tala.ir/', {
+        timeout: timeoutMs,
+        responseType: 'text',
+        headers: this.talaBrowserHeaders,
+      });
+      const $ = cheerio.load(html);
+      const fromHome = this.parseOunceUsd(
+        $('#silver .mprice .price').first().text(),
+      );
+      if (fromHome > 0) {
+        return { site: 'tala.ir', price: [fromHome] };
+      }
+
+      const { data: banner } = await axios.get<{
+        price?: Record<string, unknown>;
+      }>('https://www.tala.ir/banner/', {
+        timeout: timeoutMs,
+        params: {
+          rnd: Date.now().toString(36),
+          ids: '1001,1002,1003,1004,1005,1006,1007,1016,1011,1010,1017,1013,11255,1026,1030,',
+          'is-mobile': 0,
+          android: 0,
+          ios: 0,
+          h: 1080,
+          w: 1920,
+        },
+        headers: {
+          ...this.httpHeaders,
+          Accept: 'application/json, text/javascript, */*; q=0.01',
+          Referer: 'https://www.tala.ir/',
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+      });
+
+      const fromBanner = this.parseTalaSilverOunceField(banner?.price?.silver);
+      if (fromBanner > 0) {
+        return { site: 'tala.ir', price: [fromBanner] };
+      }
+
+      return { site: 'tala.ir', price: [0] };
+    } catch (error) {
+      console.error('❌ Error fetching silver ounce from tala.ir:', error);
+      return {
+        site: 'tala.ir',
+        price: [0],
+      };
+    }
+  }
+
+  /**
+   * Live silver ounce shown on tala.ir's نقره(اونس) tile when /banner/ omits
+   * `price` for server clients. TGJU `current.silver` matches that tile.
+   */
+  async getOunceFromTgju(
+    timeoutMs = 20000,
+  ): Promise<{ site: string; price: [number] }> {
+    try {
+      const { data } = await axios.get<{
+        current?: { silver?: { p?: string | number } };
+      }>('https://call2.tgju.org/ajax.json', {
+        timeout: timeoutMs,
+        headers: {
+          ...this.httpHeaders,
+          Referer: 'https://www.tgju.org/',
+        },
+      });
+      const price = this.parseOunceUsd(String(data?.current?.silver?.p ?? ''));
+      if (!price) {
+        throw new Error('Could not parse current.silver from TGJU');
+      }
+      return { site: 'tgju.org', price: [price] };
+    } catch (error) {
+      console.error('❌ Error fetching silver ounce from TGJU:', error);
+      return {
+        site: 'tgju.org',
+        price: [0],
+      };
+    }
   }
 
   /**
@@ -277,16 +392,30 @@ export class SilverService {
    * Iran market average stays as last saved / admin-set value on the FE;
    * here we refresh global ounce → tomanGlobalPrice and bubble.
    */
-  async refreshHomepageSilverPrices(): Promise<SilverRo | null> {
+  async refreshHomepageSilverPrices(
+    liveOnly = false,
+  ): Promise<SilverRo | null> {
     const previous = await this.silverModel
       .findOne({ productType: 'ball999' })
       .sort({ createdAt: -1 });
 
-    const [trendoOunce, moj3Ounce, kitco] = await Promise.all([
-      this.getOunceFromTrendo(15000),
-      this.getOunceFromMoj3(15000),
-      this.getPriceFromKitco(),
-    ]);
+    const [talaOunce, tgjuOunce, trendoOunce, moj3Ounce, kitco] = liveOnly
+      ? [
+          ...(await Promise.all([
+            this.getOunceFromTalaIr(8000),
+            this.getOunceFromTgju(8000),
+          ])),
+          { site: 'trendo.com', price: [0] as [number] },
+          { site: 'moj3.ir', price: [0] as [number] },
+          { site: 'kitco.com', price: [0] as [number] },
+        ]
+      : await Promise.all([
+          this.getOunceFromTalaIr(15000),
+          this.getOunceFromTgju(15000),
+          this.getOunceFromTrendo(15000),
+          this.getOunceFromMoj3(15000),
+          this.getPriceFromKitco(),
+        ]);
 
     const fetchedTomanPerDollar = await this.usdToIrrService.getTomanPerDollar();
     const tomanPerDollar =
@@ -296,28 +425,26 @@ export class SilverService {
           ? previous.tomanPerDollar
           : 0;
 
+    const talaPrice = Number(talaOunce.price[0]) || 0;
+    const tgjuPrice = Number(tgjuOunce.price[0]) || 0;
     const trendoPrice = Number(trendoOunce.price[0]) || 0;
     const moj3Price = Number(moj3Ounce.price[0]) || 0;
     const kitcoPrice = Number(kitco.price[0]) || 0;
     const OUNCE_TO_KG_FACTOR = 32.15;
 
+    const candidates: Array<{ site: string; price: number }> = [
+      { site: talaOunce.site, price: talaPrice },
+      { site: tgjuOunce.site, price: tgjuPrice },
+      { site: trendoOunce.site, price: trendoPrice },
+      { site: moj3Ounce.site, price: moj3Price },
+      { site: kitco.site, price: kitcoPrice },
+    ];
+    const chosen = candidates.find((row) => row.price > 0);
     const globalOunceUsd =
-      trendoPrice > 0
-        ? trendoPrice
-        : moj3Price > 0
-          ? moj3Price
-          : kitcoPrice > 0
-            ? kitcoPrice
-            : Number(previous?.globalPrices?.[0]?.[0]) || 0;
-
-    const globalSiteNames =
-      trendoPrice > 0
-        ? [trendoOunce.site]
-        : moj3Price > 0
-          ? [moj3Ounce.site]
-          : kitcoPrice > 0
-            ? [kitco.site]
-            : previous?.globalSiteNames || [];
+      chosen?.price || Number(previous?.globalPrices?.[0]?.[0]) || 0;
+    const globalSiteNames = chosen
+      ? [chosen.site]
+      : previous?.globalSiteNames || [];
 
     const globalPrices: [number][] = [[globalOunceUsd || 0]];
 

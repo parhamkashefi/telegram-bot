@@ -28,7 +28,7 @@ export class PriceRefreshService implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit() {
     this.logger.log(
-      `🚀 Price refresh scheduler started (full HTTP refresh every ${REFRESH_INTERVAL_MS / 60_000} minutes, live gold/coins every ${LIVE_GOLD_INTERVAL_MS / 1000}s)`,
+      `🚀 Price refresh scheduler started (full HTTP refresh every ${REFRESH_INTERVAL_MS / 60_000} minutes, live gold/silver/coins every ${LIVE_GOLD_INTERVAL_MS / 1000}s)`,
     );
 
     this.initialTimeout = setTimeout(() => {
@@ -85,10 +85,11 @@ export class PriceRefreshService implements OnModuleInit, OnModuleDestroy {
     try {
       await Promise.all([
         this.goldService.refreshHomepageGoldPrices(),
+        this.silverService.refreshHomepageSilverPrices(true),
         this.coinService.refreshTabloTalaCoins(),
       ]);
     } catch (error) {
-      this.logger.error('❌ Live gold/coin refresh failed', error);
+      this.logger.error('❌ Live gold/silver/coin refresh failed', error);
     } finally {
       this.liveGoldRefreshInProgress = false;
     }

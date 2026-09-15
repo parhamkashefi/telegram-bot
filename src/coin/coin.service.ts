@@ -1,16 +1,17 @@
 import { Injectable } from '@nestjs/common';
-import axios from 'axios';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { plainToInstance } from 'class-transformer';
 import { Coin, CoinDocument } from './schema/coin.schema';
 import { CoinRo } from './dto/coin.ro';
 import { CoinDto } from './dto/coin.dto';
+import { TabloTalaService } from '../tablotala/tablotala.service';
 
 @Injectable()
 export class CoinService {
   constructor(
     @InjectModel(Coin.name) private readonly coinModel: Model<CoinDocument>,
+    private readonly tabloTalaService: TabloTalaService,
   ) {}
 
   async getCoinFromDB(): Promise<CoinRo | null> {
@@ -51,35 +52,14 @@ export class CoinService {
   }
 
   /**
-   * Fast homepage coin refresh from Tablo Tala's JSON API (no browser).
+   * Homepage coin refresh from Tablo Tala member webservice (JSON),
+   * with the public TV feed as fallback.
    */
   async refreshTabloTalaCoins(): Promise<CoinRo | null> {
     const previous = await this.coinModel.findOne().sort({ createdAt: -1 });
 
     try {
-      const { data } = await axios.get<{
-        status?: string;
-        data?: Array<{ type?: string; price?: number }>;
-      }>('https://admin.tablotala.app/api/tv/price?type=IR', {
-        timeout: 8000,
-        headers: {
-          Accept: 'application/json',
-          Origin: 'https://tv.tablotala.app',
-          Referer: 'https://tv.tablotala.app/',
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        },
-      });
-
-      const rows = Array.isArray(data?.data) ? data.data : [];
-      const byType = new Map<string, number>();
-      for (const row of rows) {
-        const type = String(row?.type || '');
-        const price = Number(row?.price);
-        if (type && Number.isFinite(price) && price > 0) {
-          byType.set(type, price);
-        }
-      }
+      const byType = await this.tabloTalaService.getPrices(8000);
 
       const oldCoin = byType.get('IRCOLD') || previous?.oldCoin || 0;
       const newCoin = byType.get('IRCNEW') || previous?.newCoin || 0;
