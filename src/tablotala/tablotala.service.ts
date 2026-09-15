@@ -31,8 +31,15 @@ export class TabloTalaService {
    * Member webservice first (price.tablotala.com/json.php),
    * then the public TV feed as fallback.
    */
-  async getPrices(timeoutMs = 8000): Promise<TabloTalaPriceMap> {
-    if (this.cache && Date.now() - this.cache.at < this.cacheMs) {
+  async getPrices(
+    timeoutMs = 8000,
+    options?: { bypassCache?: boolean },
+  ): Promise<TabloTalaPriceMap> {
+    if (
+      !options?.bypassCache &&
+      this.cache &&
+      Date.now() - this.cache.at < this.cacheMs
+    ) {
       return this.cache.rows;
     }
     if (this.inflight) return this.inflight;

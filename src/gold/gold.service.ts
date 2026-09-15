@@ -166,22 +166,27 @@ export class GoldService {
   }
 
   /**
-   * Homepage refresh: member Tablo Tala webservice, then tala.ir fallbacks.
-   * Updates the latest gold document in place.
+   * Homepage refresh from Tablo Tala member API.
+   * Live ticks skip USD/tala.ir so GOLD can update every 10s.
    */
-  async refreshHomepageGoldPrices(): Promise<GoldRo | null> {
-    const LIVE_TIMEOUT_MS = 8000;
+  async refreshHomepageGoldPrices(options?: {
+    live?: boolean;
+  }): Promise<GoldRo | null> {
+    const live = Boolean(options?.live);
+    const LIVE_TIMEOUT_MS = live ? 6000 : 8000;
     const previous = await this.goldModel
       .findOne({ productType: 'gold' })
       .sort({ createdAt: -1 });
 
-    const tabloRows = await this.fetchTabloTalaIrRows(LIVE_TIMEOUT_MS);
+    const tabloRows = await this.tabloTalaService.getPrices(LIVE_TIMEOUT_MS, {
+      bypassCache: live,
+    });
     let iran18k = tabloRows.get('IRG18') || 0;
     let iranSite = 'tablotala';
     let ounceUsd = tabloRows.get('GOLD') || 0;
     let ounceSite = 'tablotala';
 
-    if (iran18k <= 0) {
+    if (!live && iran18k <= 0) {
       const talaIr = await this.getPriceFromTalaIr(LIVE_TIMEOUT_MS);
       iran18k = Number(talaIr.prices[0]) || 0;
       iranSite = talaIr.site;
@@ -191,7 +196,7 @@ export class GoldService {
       iranSite = previous?.siteNames?.[0] || iranSite;
     }
 
-    if (ounceUsd <= 0) {
+    if (!live && ounceUsd <= 0) {
       const talaOunce = await this.getOunceFromTalaIr(LIVE_TIMEOUT_MS);
       ounceUsd = Number(talaOunce.price[0]) || 0;
       ounceSite = talaOunce.site;
@@ -203,7 +208,9 @@ export class GoldService {
 
     const average = iran18k;
 
-    const fetchedTomanPerDollar = await this.usdToIrrService.getTomanPerDollar();
+    const fetchedTomanPerDollar = live
+      ? 0
+      : await this.usdToIrrService.getTomanPerDollar();
     const tomanPerDollar =
       fetchedTomanPerDollar > 0
         ? fetchedTomanPerDollar
